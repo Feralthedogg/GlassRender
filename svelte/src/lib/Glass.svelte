@@ -5,7 +5,7 @@
     outline options (radius, corner, mask) apply.
 -->
 <script lang="ts">
-    import { getContext, untrack, type Snippet } from "svelte";
+    import { getContext, onDestroy, untrack, type Snippet } from "svelte";
     import type { HTMLAttributes } from "svelte/elements";
     import type {
         Appearance, CornerStyle, GlassShape, GroupMember, MaterialSpec, Preset, Radius, Rgba, ShownScheme, Transition
@@ -59,8 +59,12 @@
     const group = getContext<GroupState | undefined>(GROUP_KEY);
     let box: HTMLDivElement;
     let down = $state(false);
+    let pressPointer: number | null = null;
+    let pressCleanup: (() => void) | null = null;
     let shape: GlassShape | null = null;
     let member: GroupMember | null = null;
+
+    onDestroy(() => { pressCleanup?.(); });
 
     // the box keeps the corners of its glass, so its own background or outline matches
     const rounding = $derived(radius === undefined ? "9999px" : typeof radius === "number" ? radius + "px" : radius.map((r) => r + "px").join(" "));
@@ -117,27 +121,46 @@
 
     type BoxEvent = PointerEvent & { currentTarget: EventTarget & HTMLDivElement };
 
-    // the press handlers run after the ones given to the component
+    function releasePress(pointerId?: number): void {
+        if (pointerId !== undefined && pointerId !== pressPointer) return;
+        pressCleanup?.();
+        down = false;
+    }
+
+    // Observe releases without capturing the pointer away from a child button or link.
     function pointerdown(e: BoxEvent): void {
         onpointerdown?.(e);
-        if (!interactive || e.defaultPrevented) return;
+        if (!interactive || e.defaultPrevented || pressPointer !== null) return;
+        const doc = box.ownerDocument, win = doc.defaultView;
+        const finish = (event: PointerEvent): void => { releasePress(event.pointerId); };
+        const blur = (): void => { releasePress(); };
+        pressPointer = e.pointerId;
+        pressCleanup = () => {
+            doc.removeEventListener("pointerup", finish, true);
+            doc.removeEventListener("pointercancel", finish, true);
+            win?.removeEventListener("blur", blur);
+            pressPointer = null;
+            pressCleanup = null;
+        };
+        doc.addEventListener("pointerup", finish, true);
+        doc.addEventListener("pointercancel", finish, true);
+        win?.addEventListener("blur", blur);
         down = true;
-        box.setPointerCapture(e.pointerId);
     }
 
     function pointerup(e: BoxEvent): void {
         onpointerup?.(e);
-        down = false;
+        releasePress(e.pointerId);
     }
 
     function pointercancel(e: BoxEvent): void {
         onpointercancel?.(e);
-        down = false;
+        releasePress(e.pointerId);
     }
 
     function lostcapture(e: BoxEvent): void {
         onlostpointercapture?.(e);
-        down = false;
+        releasePress(e.pointerId);
     }
 </script>
 

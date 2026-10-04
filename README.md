@@ -25,7 +25,7 @@ From the repository root:
 npm run demo
 ```
 
-Open [http://127.0.0.1:5173/examples/quick-start.html](http://127.0.0.1:5173/examples/quick-start.html).
+Open [http://127.0.0.1:5173/examples/quick-start.html](http://127.0.0.1:5173/examples/quick-start.html). The playground at [http://127.0.0.1:5173/examples/](http://127.0.0.1:5173/examples/) has every shape kind, preset, environment setting and chromatic aberration control of the core API.
 
 The complete example is `examples/quick-start.html`. It defines the canvas size, supplies its own backdrop, and imports the built browser module. Serve it over HTTP.
 
@@ -87,7 +87,7 @@ npm --prefix react run build
 npm --prefix react run demo -- --host 127.0.0.1 --strictPort
 ```
 
-Open [http://127.0.0.1:5175/quick-start.html](http://127.0.0.1:5175/quick-start.html).
+Open [http://127.0.0.1:5175/quick-start.html](http://127.0.0.1:5175/quick-start.html). The full component demo is at [http://127.0.0.1:5175/](http://127.0.0.1:5175/).
 
 `react/demo/quick-start.html` provides `#app` and loads this complete entry point, `react/demo/quick-start.tsx`:
 
@@ -133,7 +133,7 @@ npm --prefix svelte run package
 npm --prefix svelte run demo -- --host 127.0.0.1 --strictPort
 ```
 
-Open [http://127.0.0.1:5174/quick-start.html](http://127.0.0.1:5174/quick-start.html).
+Open [http://127.0.0.1:5174/quick-start.html](http://127.0.0.1:5174/quick-start.html). The full component demo is at [http://127.0.0.1:5174/](http://127.0.0.1:5174/).
 
 `svelte/demo/quick-start.html` provides `#app`. Its entry point mounts `svelte/demo/QuickStart.svelte`:
 
@@ -180,7 +180,7 @@ npm --prefix vue run build
 npm --prefix vue run demo -- --host 127.0.0.1 --strictPort
 ```
 
-Open [http://127.0.0.1:5176/quick-start.html](http://127.0.0.1:5176/quick-start.html).
+Open [http://127.0.0.1:5176/quick-start.html](http://127.0.0.1:5176/quick-start.html). The full component demo is at [http://127.0.0.1:5176/](http://127.0.0.1:5176/).
 
 `vue/demo/quick-start.html` provides `#app`. Its entry point mounts `vue/demo/QuickStart.vue`:
 

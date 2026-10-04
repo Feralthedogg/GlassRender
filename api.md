@@ -859,9 +859,11 @@ Pass environment settings as individual `GlassCanvas` props. The core API instea
 
 | Additional prop | Default | Description |
 | --- | --- | --- |
-| `interactive` | `false` | Automatically shows the pressed veil while a pointer is down. Use a real button or link for HTML control and keyboard behavior. |
+| `interactive` | `false` | Automatically shows the pressed veil while a pointer is down, preserving clicks on child buttons and links. Use a real button or link for HTML control and keyboard behavior. |
 | `everyFrame` | `false` | Measures a box moving through CSS animation on every frame. |
 | DOM attributes | Standard DOM defaults | Accepts `className` or `class`, `style`, DOM events and content. |
+
+Put click handlers on the actual button or link inside `Glass`. `interactive` tracks the press without taking pointer capture from the child, and clears the veil on release outside the box, cancellation or window blur.
 
 Mask geometry is chosen when the shape is first created. A group member's `corner` and the follower's `everyFrame` setting are also chosen at initial attachment; remount the component to change them. The default radius is half the short side. Set the `radius` prop to change the glass outline; a CSS `border-radius` alone changes only the DOM styling.
 

@@ -68,8 +68,12 @@ export const Glass = forwardRef<HTMLDivElement, GlassProps>(function Glass(props
     const box = useRef<HTMLDivElement | null>(null);
     const shape = useRef<GlassShape | null>(null), member = useRef<GroupMember | null>(null);
     const [down, setDown] = useState(false);
+    const pressPointer = useRef<number | null>(null);
+    const pressCleanup = useRef<(() => void) | null>(null);
     const latest = useRef(props);
     latest.current = props;
+
+    useEffect(() => () => { pressCleanup.current?.(); }, []);
 
     useEffect(() => {
         const el = box.current, p = latest.current;
@@ -130,16 +134,35 @@ export const Glass = forwardRef<HTMLDivElement, GlassProps>(function Glass(props
     useEffect(() => { shape.current?.set({ transition }); }, [transition]);
     useEffect(() => { shape.current?.press(pressed || down); }, [pressed, down]);
 
-    // the press handlers run after the ones given to the component
+    const releasePress = (pointerId?: number): void => {
+        if (pointerId !== undefined && pointerId !== pressPointer.current) return;
+        pressCleanup.current?.();
+        setDown(false);
+    };
+
+    // Observe releases without capturing the pointer away from a child button or link.
     const pointerDown = (e: PointerEvent<HTMLDivElement>): void => {
         onPointerDown?.(e);
-        if (!interactive || e.defaultPrevented) return;
+        if (!interactive || e.defaultPrevented || pressPointer.current !== null) return;
+        const doc = e.currentTarget.ownerDocument, win = doc.defaultView;
+        const finish = (event: globalThis.PointerEvent): void => { releasePress(event.pointerId); };
+        const blur = (): void => { releasePress(); };
+        pressPointer.current = e.pointerId;
+        pressCleanup.current = () => {
+            doc.removeEventListener("pointerup", finish, true);
+            doc.removeEventListener("pointercancel", finish, true);
+            win?.removeEventListener("blur", blur);
+            pressPointer.current = null;
+            pressCleanup.current = null;
+        };
+        doc.addEventListener("pointerup", finish, true);
+        doc.addEventListener("pointercancel", finish, true);
+        win?.addEventListener("blur", blur);
         setDown(true);
-        e.currentTarget.setPointerCapture(e.pointerId);
     };
-    const pointerUp = (e: PointerEvent<HTMLDivElement>): void => { onPointerUp?.(e); setDown(false); };
-    const pointerCancel = (e: PointerEvent<HTMLDivElement>): void => { onPointerCancel?.(e); setDown(false); };
-    const lostCapture = (e: PointerEvent<HTMLDivElement>): void => { onLostPointerCapture?.(e); setDown(false); };
+    const pointerUp = (e: PointerEvent<HTMLDivElement>): void => { onPointerUp?.(e); releasePress(e.pointerId); };
+    const pointerCancel = (e: PointerEvent<HTMLDivElement>): void => { onPointerCancel?.(e); releasePress(e.pointerId); };
+    const lostCapture = (e: PointerEvent<HTMLDivElement>): void => { onLostPointerCapture?.(e); releasePress(e.pointerId); };
     const merged: CSSProperties = { borderRadius: rounding(radius), ...style };
     const attach = useCallback((el: HTMLDivElement | null): void => { box.current = el; assign(ref, el); }, [ref]);
 

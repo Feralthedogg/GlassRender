@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 
 const ROOT = resolve(new URL("..", import.meta.url).pathname);
-const TYPES = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".png": "image/png", ".json": "application/json" };
+const TYPES = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json" };
 const port = Number(process.env.PORT || 5173);
 createServer((req, res) => {
     let path = decodeURIComponent(new URL(req.url, "http://x").pathname);

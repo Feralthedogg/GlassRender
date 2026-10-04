@@ -15,6 +15,7 @@
 !/examples/index.html
 !/examples/quick-start.html
 !/examples/serve.mjs
+!/examples/shared/
 
 !/react/
 /react/*

@@ -2,7 +2,7 @@
 // the box sits on the glass and takes the colour for content on it (`--glass-foreground`; `--glass-title` is the
 // colour for a control title). Inside a `GlassGroup` the box becomes a member of the group's glass and only its
 // outline options (radius, corner, mask) apply.
-import { defineComponent, h, inject, mergeProps, ref, shallowRef, watch, type PropType } from "vue";
+import { defineComponent, h, inject, mergeProps, onBeforeUnmount, ref, shallowRef, watch, type PropType } from "vue";
 import type {
     Appearance, CornerStyle, GlassShape, GroupMember, MaterialSpec, Preset, Radius, Rgba, ShownScheme, Transition
 } from "glassrender";
@@ -65,7 +65,11 @@ export const Glass = defineComponent({
         const canvas = inject(CANVAS_KEY, undefined), group = inject(GROUP_KEY, undefined);
         const box = shallowRef<HTMLDivElement | null>(null);
         const down = ref(false);
+        let pressPointer: number | null = null;
+        let pressCleanup: (() => void) | null = null;
         let shape: GlassShape | null = null, member: GroupMember | null = null;
+
+        onBeforeUnmount(() => { pressCleanup?.(); });
 
         // the shape (or the member of the group around it) once the box and the glass are there
         watch(() => [box.value, canvas === undefined ? null : canvas.glass, group === undefined ? null : group.group] as const, ([el, glass, g], _old, onCleanup) => {
@@ -124,16 +128,35 @@ export const Glass = defineComponent({
         watch(() => props.transition, (v) => { shape?.set({ transition: v }); });
         watch(() => props.pressed || down.value, (v) => { shape?.press(v); });
 
-        // the press handlers run after the ones given to the component
+        const releasePress = (pointerId?: number): void => {
+            if (pointerId !== undefined && pointerId !== pressPointer) return;
+            pressCleanup?.();
+            down.value = false;
+        };
+
+        // Observe releases without capturing the pointer away from a child button or link.
         const pointerdown = (e: PointerEvent): void => {
             call(attrs.onPointerdown, e);
-            if (!props.interactive || e.defaultPrevented) return;
+            if (!props.interactive || e.defaultPrevented || pressPointer !== null) return;
+            const doc = (e.currentTarget as HTMLElement).ownerDocument, win = doc.defaultView;
+            const finish = (event: PointerEvent): void => { releasePress(event.pointerId); };
+            const blur = (): void => { releasePress(); };
+            pressPointer = e.pointerId;
+            pressCleanup = () => {
+                doc.removeEventListener("pointerup", finish, true);
+                doc.removeEventListener("pointercancel", finish, true);
+                win?.removeEventListener("blur", blur);
+                pressPointer = null;
+                pressCleanup = null;
+            };
+            doc.addEventListener("pointerup", finish, true);
+            doc.addEventListener("pointercancel", finish, true);
+            win?.addEventListener("blur", blur);
             down.value = true;
-            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
         };
-        const pointerup = (e: PointerEvent): void => { call(attrs.onPointerup, e); down.value = false; };
-        const pointercancel = (e: PointerEvent): void => { call(attrs.onPointercancel, e); down.value = false; };
-        const lostcapture = (e: PointerEvent): void => { call(attrs.onLostpointercapture, e); down.value = false; };
+        const pointerup = (e: PointerEvent): void => { call(attrs.onPointerup, e); releasePress(e.pointerId); };
+        const pointercancel = (e: PointerEvent): void => { call(attrs.onPointercancel, e); releasePress(e.pointerId); };
+        const lostcapture = (e: PointerEvent): void => { call(attrs.onLostpointercapture, e); releasePress(e.pointerId); };
 
         return () => {
             const { onPointerdown: _a, onPointerup: _b, onPointercancel: _c, onLostpointercapture: _d, ...rest } = attrs;

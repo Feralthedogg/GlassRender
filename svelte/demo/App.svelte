@@ -1,145 +1,290 @@
+<!-- The component demo: a small page built from glass components, with a panel of settings on the side. -->
 <script lang="ts">
+    import { PRESET_NAMES, packPreset, presetNumber, type Appearance, type Preset, type ShownScheme } from "glassrender";
     import { Glass, GlassCanvas, GlassGroup } from "../src/lib/index.js";
-    import { PRESET_NAMES, type Appearance, type Preset, type Rgba, type ShownScheme } from "glassrender";
+    import { BACKDROPS, backdropThumbnail, screenBackdrop } from "../../examples/shared/backdrops.js";
+    import type { IconName } from "../../examples/shared/icons.js";
+    import {
+        ACCENTS, ENVIRONMENT, LENS_DEFAULT, LENS_FIELDS, RIM_DEFAULT, RIM_FIELDS, TINTS, cssColor, fringeMaterial, materialCode, presetOrder,
+        type EnvironmentChoice, type LensFringes, type RimFringes
+    } from "../../examples/shared/options.js";
+    import Fringe from "./Fringe.svelte";
+    import Icon from "./Icon.svelte";
 
-    // a painted backdrop: soft colour fields, a few discs and lines of text, so refraction and blur show
-    function paint(): HTMLCanvasElement {
-        const c = document.createElement("canvas");
-        c.width = 2400; c.height = 1600;
-        const g = c.getContext("2d") as CanvasRenderingContext2D;
-        let seed = 7;
-        const rnd = (): number => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
-        const bg = g.createLinearGradient(0, 0, c.width, c.height);
-        bg.addColorStop(0, "#1b3a5c"); bg.addColorStop(0.5, "#5a2d6e"); bg.addColorStop(1, "#c4553a");
-        g.fillStyle = bg; g.fillRect(0, 0, c.width, c.height);
-        for (let i = 0; i < 26; i++) {
-            const x = rnd() * c.width, y = rnd() * c.height, r = 80 + rnd() * 360;
-            const fill = g.createRadialGradient(x, y, 0, x, y, r);
-            fill.addColorStop(0, `hsla(${rnd() * 360}, 85%, ${45 + rnd() * 35}%, 0.9)`);
-            fill.addColorStop(1, "hsla(0, 0%, 0%, 0)");
-            g.fillStyle = fill; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
-        }
-        g.fillStyle = "rgba(255,255,255,.85)"; g.font = "600 46px system-ui, sans-serif";
-        for (let i = 0; i < 18; i++) g.fillText("GlassRender  유리 재질 렌더러  0123456789", 40 + (i % 3) * 90, 90 + i * 88);
-        return c;
+    const PRESETS: Preset[] = presetOrder(PRESET_NAMES);
+    const APPEARANCES: { value: Appearance; label: string; icon: IconName }[] = [
+        { value: "auto", label: "Auto", icon: "auto" }, { value: "light", label: "Light", icon: "sun" }, { value: "dark", label: "Dark", icon: "moon" }
+    ];
+    const SONG_LENGTH = 228;
+    const GUIDE = "https://github.com/Feralthedogg/GlassRender/blob/main/api.md#svelte-components";
+    // the largest surface, the card, is about this many points on its short side
+    const SURFACE_SIDE = 360;
+
+    // the capture margin a preset gets on its own (the third info value of its packed block); fringes reach further
+    const packed = new Float32Array(200), info = new Float32Array(6);
+    function presetMargin(p: Preset, side: number): number {
+        packPreset(packed, 0, info, 0, Math.max(0, presetNumber(p)), side, side, 0, 1);
+        return info[2] ?? 0;
     }
 
-    const backdrop = paint();
-    let appearance: Appearance = $state("auto");
+    // scene
+    let wallpaper = $state(BACKDROPS[0].id);
+    let backdrop = $state(screenBackdrop(BACKDROPS[0].id));
+    let appearance: Appearance = $state(BACKDROPS[0].scheme);
+    let accent = $state(0);
+    let angle = $state(0);
+    let follow = $state(false);
+    // surfaces
     let preset: Preset = $state("standard");
-    let coloured = $state(false);
+    let tint = $state(0);
     let cardShown = $state(true);
-    // surroundings of the built-in materials
-    let inactive = $state(false);
-    let tintedSetting = $state(false);
-    let opaque = $state(false);
-    let contrast = $state(false);
-    let still = $state(false);
+    let rim: RimFringes = $state(RIM_DEFAULT);
+    let layer: LensFringes = $state(LENS_DEFAULT);
+    let env: Record<EnvironmentChoice["key"], boolean> = $state({
+        inactive: false, tinted: false, reduceTransparency: false, increaseContrast: false, reduceMotion: false, buttonShapes: false
+    });
+    // what the glass reports back, and the page itself
+    let panelScheme: ShownScheme = $state("dark");
     let puckScheme: ShownScheme = $state("dark");
-    let followLight = $state(false);
-    let lightAngle = $state(0);
-    let puck = $state({ x: 120, y: 420 });
-    const tint: Rgba = [0.15, 0.5, 1, 0.55];
-    const presets: Preset[] = [...PRESET_NAMES];
+    // the puck starts in an empty corner: bottom left beside the panel, or top right on a phone
+    let puck = $state(innerWidth > 760 ? { x: 40, y: innerHeight - 120 } : { x: innerWidth - 96, y: 100 });
+    let playing = $state(true);
+    let elapsed = $state(84);
+    let toast: "" | "enter" | "shown" | "leave" = $state("");
+    let sheetOpen = $state(false);
 
-    function move(e: PointerEvent): void {
-        if (!followLight) return;
-        // the lights turn toward the pointer, as a tilted screen would turn them
-        const a = Math.atan2(e.clientX - innerWidth / 2, innerHeight / 2 - e.clientY);
-        lightAngle = a + Math.PI / 4;
+    const tintColour = $derived(TINTS[tint]?.rgba ?? null);
+    // one material object for the surfaces, made again only when a setting changes
+    const fringes = $derived(fringeMaterial(rim, layer, presetMargin(preset, SURFACE_SIDE)));
+    const accentColour = $derived(ACCENTS[accent]?.rgb ?? ACCENTS[0].rgb);
+    const clock = (s: number): string => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
+
+    function step(by: number): void {
+        preset = PRESETS[(PRESETS.indexOf(preset) + by + PRESETS.length) % PRESETS.length] ?? preset;
     }
+    function chooseWallpaper(id: string): void {
+        wallpaper = id;
+        backdrop = screenBackdrop(id);
+        // each wallpaper comes with the appearance that suits it; the buttons can still change it
+        appearance = BACKDROPS.find((b) => b.id === id)?.scheme ?? "auto";
+    }
+
+    // the wallpaper is painted for the window, so paint it again once a resize settles
+    let resizeTimer = 0;
+    function resized(): void {
+        clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(() => (backdrop = screenBackdrop(wallpaper)), 150);
+    }
+
+    // the lights turn toward the pointer, as a tilted screen would turn them
+    function aim(e: PointerEvent): void {
+        if (!follow) return;
+        const a = Math.atan2(e.clientX - innerWidth / 2, innerHeight / 2 - e.clientY) + Math.PI / 4;
+        angle = Math.round(((a * 180 / Math.PI + 540) % 360) - 180);
+    }
+
+    $effect(() => { document.documentElement.style.setProperty("--accent", cssColor(accentColour)); });
+
+    $effect(() => {
+        if (!playing) return;
+        const timer = setInterval(() => (elapsed = (elapsed + 1) % SONG_LENGTH), 1000);
+        return () => clearInterval(timer);
+    });
+
+    // the notification is made hidden and shown a frame later, so its glass materializes; it leaves on its own
+    $effect(() => {
+        if (toast === "enter") { const f = requestAnimationFrame(() => (toast = "shown")); return () => cancelAnimationFrame(f); }
+        if (toast === "shown") { const t = setTimeout(() => (toast = "leave"), 4200); return () => clearTimeout(t); }
+        if (toast === "leave") { const t = setTimeout(() => (toast = ""), 450); return () => clearTimeout(t); }
+    });
 
     let dragging = false, dx = 0, dy = 0;
     function grab(e: PointerEvent): void {
-        dragging = true; dx = e.clientX - puck.x; dy = e.clientY - puck.y;
+        dragging = true;
+        dx = e.clientX - puck.x;
+        dy = e.clientY - puck.y;
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     }
-    function drag(e: PointerEvent): void {
+    function pull(e: PointerEvent): void {
         if (dragging) puck = { x: e.clientX - dx, y: e.clientY - dy };
     }
 </script>
 
-<svelte:window onpointermove={move} />
+<svelte:window onresize={resized} onpointermove={aim} />
 
-<GlassCanvas {backdrop} {appearance} {lightAngle} active={!inactive} tinted={tintedSetting}
-    reduceTransparency={opaque ? true : "auto"} increaseContrast={contrast ? true : "auto"} reduceMotion={still ? true : "auto"}>
-    <main>
-        <GlassGroup spacing={18} {preset}>
-            <nav class="toolbar">
-                <Glass class="tool"><span>◀</span></Glass>
-                <Glass class="tool"><span>▶</span></Glass>
-                <Glass class="tool"><span>＋</span></Glass>
-                <Glass class="tool wide"><span>공유</span></Glass>
+<GlassCanvas {backdrop} {appearance} lightAngle={angle * Math.PI / 180} accent={accentColour} active={!env.inactive} tinted={env.tinted}
+    buttonShapes={env.buttonShapes} reduceTransparency={env.reduceTransparency ? true : "auto"}
+    increaseContrast={env.increaseContrast ? true : "auto"} reduceMotion={env.reduceMotion ? true : "auto"}>
+    <main class="stage">
+        <!-- one piece of glass for three boxes: neighbours closer than `spacing` flow into each other -->
+        <GlassGroup spacing={24} {preset} tint={tintColour} material={fringes}>
+            <nav class="toolbar" aria-label="Material">
+                <Glass class="tool"><button aria-label="Previous material" onclick={() => step(-1)}><Icon name="left" /></button></Glass>
+                <Glass class="tool wide"><button onclick={() => step(1)}><Icon name="layers" />{preset}</button></Glass>
+                <Glass class="tool"><button aria-label="Next material" onclick={() => step(1)}><Icon name="right" /></button></Glass>
             </nav>
         </GlassGroup>
 
-        <Glass class="card" radius={28} {preset} tint={coloured ? tint : null} visible={cardShown}>
-            <div class="fade" class:gone={!cardShown}>
-                <h1>GlassRender</h1>
-                <p>배경을 굴절하고 흐리게 하는 유리 재질 렌더러입니다. 이 카드와 버튼은 DOM 요소이고, 유리는 그 상자를 따라 캔버스에 그려집니다.</p>
-                <div class="row">
-                    <Glass class="button primary" interactive preset="prominent" visible={cardShown}>확인</Glass>
-                    <Glass class="button" interactive {preset} visible={cardShown}>취소</Glass>
+        <div class="scene">
+            <Glass class="hero" radius={30} {preset} tint={tintColour} material={fringes} visible={cardShown}>
+                <div class="fade" class:gone={!cardShown}>
+                    <span class="eyebrow">Svelte components</span>
+                    <h1>Glass that follows your layout.</h1>
+                    <p>
+                        Every surface here is an ordinary element. <code>&lt;Glass&gt;</code> draws refractive glass under its box on one shared
+                        WebGL2 canvas and keeps it there as the page lays out, scrolls and resizes.
+                    </p>
+                    <div class="actions">
+                        <Glass class="cta" interactive preset="prominent" radius={24} visible={cardShown}>
+                            <button type="button" onclick={() => { if (toast === "") toast = "enter"; }}><Icon name="bell" />Show a notification</button>
+                        </Glass>
+                        <Glass class="cta" interactive {preset} radius={24} visible={cardShown}>
+                            <a href={GUIDE} target="_blank" rel="noreferrer"><Icon name="book" />API guide</a>
+                        </Glass>
+                    </div>
                 </div>
-            </div>
-        </Glass>
+            </Glass>
 
-        <Glass class="panel" radius={22} {preset}>
-            <div class="controls">
-                <span>외관</span>
-                {#each ["auto", "dark", "light"] as a (a)}
-                    <button class:on={appearance === a} onclick={() => (appearance = a as Appearance)}>{a === "auto" ? "자동" : a === "dark" ? "어둡게" : "밝게"}</button>
-                {/each}
-                <span>재질</span>
-                <select bind:value={preset}>
-                    {#each presets as p (p)}
-                        <option value={p}>{p}</option>
-                    {/each}
-                </select>
-                <button class:on={coloured} onclick={() => (coloured = !coloured)}>틴트</button>
-                <button class:on={!cardShown} onclick={() => (cardShown = !cardShown)}>카드 {cardShown ? "숨기기" : "보이기"}</button>
-                <button class:on={followLight} onclick={() => { followLight = !followLight; if (!followLight) lightAngle = 0; }}>빛이 포인터를 따라감</button>
-                <span>환경</span>
-                <button class:on={inactive} onclick={() => (inactive = !inactive)}>비활성 창</button>
-                <button class:on={tintedSetting} onclick={() => (tintedSetting = !tintedSetting)}>틴트 설정</button>
-                <button class:on={opaque} onclick={() => (opaque = !opaque)}>투명도 줄이기</button>
-                <button class:on={contrast} onclick={() => (contrast = !contrast)}>대비 증가</button>
-                <button class:on={still} onclick={() => (still = !still)}>동작 줄이기</button>
-            </div>
-        </Glass>
-
-        <Glass class="puck" everyFrame style="left: {puck.x}px; top: {puck.y}px" onscheme={(v) => (puckScheme = v)}
-            onpointerdown={grab} onpointermove={drag} onpointerup={() => (dragging = false)}>
-            <span>{puckScheme === "dark" ? "끌기" : "밝음"}</span>
-        </Glass>
+            <Glass class="player" radius={26} {preset} tint={tintColour} material={fringes}>
+                <div class="player-top">
+                    <div class="art"><Icon name="music" /></div>
+                    <div class="track"><b>Under the Lens</b><span>The Rim Lights</span></div>
+                </div>
+                <div class="progress"><i style="width: {(elapsed / SONG_LENGTH) * 100}%"></i></div>
+                <div class="times"><span>{clock(elapsed)}</span><span>-{clock(SONG_LENGTH - elapsed)}</span></div>
+                <div class="transport">
+                    <button aria-label="Previous" onclick={() => (elapsed = 0)}><Icon name="previous" /></button>
+                    <button class="main" aria-label={playing ? "Pause" : "Play"} onclick={() => (playing = !playing)}>
+                        <Icon name={playing ? "pause" : "play"} />
+                    </button>
+                    <button aria-label="Next" onclick={() => (elapsed = 0)}><Icon name="next" /></button>
+                </div>
+            </Glass>
+        </div>
     </main>
-</GlassCanvas>
 
-<style>
-    main {
-        min-height: 100vh;
-        padding: 28px;
-        box-sizing: border-box;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 28px;
-    }
-    .toolbar { display: flex; gap: 12px; }
-    :global(.tool) { width: 44px; height: 44px; display: grid; place-items: center; user-select: none; }
-    :global(.tool.wide) { width: 84px; }
-    :global(.card) { width: min(560px, 90vw); padding: 26px 30px; box-sizing: border-box; }
-    :global(.card) h1 { margin: 0 0 8px; font-size: 30px; }
-    :global(.card) p { margin: 0 0 18px; }
-    .row { display: flex; gap: 14px; }
-    .fade { transition: opacity .5s; }
-    .fade.gone { opacity: 0; }
-    :global(.button) { padding: 10px 26px; user-select: none; cursor: pointer; color: var(--glass-title); }
-    :global(.button.primary) { font-weight: 600; }
-    :global(.panel) { padding: 14px 18px; }
-    .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-    .controls span { opacity: .8; margin: 0 4px 0 10px; }
-    button, select { font: inherit; color: inherit; background: rgba(127, 127, 127, .18); border: 0; border-radius: 999px; padding: 6px 14px; cursor: pointer; }
-    button.on { background: rgba(127, 127, 127, .45); }
-    :global(.puck) { position: fixed; width: 56px; height: 56px; display: grid; place-items: center; cursor: grab; touch-action: none; user-select: none; font-size: 13px; }
-</style>
+    <!-- small glass takes the scheme of what is behind it: drag it over light and dark parts of the wallpaper -->
+    <Glass class="puck" everyFrame style="left: {puck.x}px; top: {puck.y}px" onscheme={(v) => (puckScheme = v)}
+        onpointerdown={grab} onpointermove={pull} onpointerup={() => (dragging = false)}>
+        <span>{puckScheme}</span>
+    </Glass>
+
+    {#if toast !== ""}
+        <Glass class={toast === "leave" ? "toast leaving" : "toast"} preset="notification" radius={22} everyFrame visible={toast === "shown"} role="status">
+            <div class="art"><Icon name="sparkle" /></div>
+            <div>
+                <b>GlassRender <small>now</small></b>
+                <p>This notification moves with a CSS animation; <code>everyFrame</code> keeps its glass underneath.</p>
+            </div>
+        </Glass>
+    {/if}
+
+    <Glass class={sheetOpen ? "inspector open" : "inspector"} preset="inspector" radius={26} onscheme={(v) => (panelScheme = v)}
+        data-scheme={panelScheme} role="complementary" aria-label="Settings">
+        <header class="panel-head">
+            <div class="brand-mark"><Icon name="logo" /></div>
+            <div class="brand">
+                <div class="brand-name">GlassRender</div>
+                <div class="brand-sub">Component demo</div>
+            </div>
+            <span class="badge">Svelte</span>
+            <button class="btn ghost icon-only sheet-toggle" aria-expanded={sheetOpen} aria-label={sheetOpen ? "Hide settings" : "Show settings"}
+                onclick={() => (sheetOpen = !sheetOpen)}><Icon name="down" /></button>
+        </header>
+
+        <div class="inspector-scroll">
+            <section class="section">
+                <h2 class="section-title">Scene</h2>
+                <div class="field">
+                    <span class="label">Appearance</span>
+                    <div class="seg">
+                        {#each APPEARANCES as a (a.value)}
+                            <button aria-pressed={appearance === a.value} onclick={() => (appearance = a.value)}><Icon name={a.icon} />{a.label}</button>
+                        {/each}
+                    </div>
+                </div>
+                <div class="field stack">
+                    <span class="label">Backdrop</span>
+                    <div class="thumbs">
+                        {#each BACKDROPS as b (b.id)}
+                            <button class="thumb" aria-pressed={wallpaper === b.id} aria-label="{b.name} backdrop" title={b.name}
+                                style="background-image: url({backdropThumbnail(b.id)})" onclick={() => chooseWallpaper(b.id)}></button>
+                        {/each}
+                    </div>
+                </div>
+                <div class="field">
+                    <span class="label">Accent</span>
+                    <div class="swatches">
+                        {#each ACCENTS as a, i (a.name)}
+                            <button class="swatch" aria-pressed={accent === i} aria-label="{a.name} accent" title={a.name} style="--c: {cssColor(a.rgb)}"
+                                onclick={() => (accent = i)}></button>
+                        {/each}
+                    </div>
+                </div>
+                <div class="field">
+                    <span class="label">Light</span>
+                    <div class="inline">
+                        <div class="range">
+                            <input type="range" min="-180" max="180" bind:value={angle} disabled={follow} aria-label="Light angle"
+                                style="--p: {((angle + 180) / 360) * 100}%" />
+                            <output>{angle}°</output>
+                        </div>
+                        <button class="btn icon-only" aria-pressed={follow} aria-label="Light follows the pointer" title="Light follows the pointer"
+                            onclick={() => { follow = !follow; if (!follow) angle = 0; }}><Icon name="pointer" /></button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section">
+                <h2 class="section-title">Surfaces</h2>
+                <div class="field">
+                    <span class="label">Material</span>
+                    <div class="inline">
+                        <label class="select">
+                            <select bind:value={preset} aria-label="Material preset">
+                                {#each PRESETS as p (p)}<option value={p}>{p}</option>{/each}
+                            </select>
+                            <Icon name="down" />
+                        </label>
+                        <button class="btn icon-only" aria-label="Previous material" onclick={() => step(-1)}><Icon name="left" /></button>
+                        <button class="btn icon-only" aria-label="Next material" onclick={() => step(1)}><Icon name="right" /></button>
+                    </div>
+                </div>
+                <div class="field">
+                    <span class="label">Tint</span>
+                    <div class="swatches">
+                        {#each TINTS as t, i (t.name)}
+                            <button class={t.rgba ? "swatch" : "swatch none"} aria-pressed={tint === i} aria-label="{t.name} tint" title={t.name}
+                                style={t.rgba ? `--c: ${cssColor(t.rgba)}` : undefined} onclick={() => (tint = i)}></button>
+                        {/each}
+                    </div>
+                </div>
+                <div class="toggle-row">
+                    <span>Show the card</span>
+                    <button class="switch" role="switch" aria-checked={cardShown} aria-label="Show the card" onclick={() => (cardShown = !cardShown)}></button>
+                </div>
+            </section>
+
+            <section class="section">
+                <h2 class="section-title">Chromatic aberration</h2>
+                <Fringe title="Rim fringes" field="aberration" value={rim} fields={RIM_FIELDS} onchange={(v) => (rim = v)} />
+                <Fringe title="Lens layer" field="lens" value={layer} fields={LENS_FIELDS} onchange={(v) => (layer = v)} />
+                <pre class="code">{materialCode(fringes)}</pre>
+            </section>
+
+            <section class="section">
+                <h2 class="section-title">Environment</h2>
+                <div class="chips">
+                    {#each ENVIRONMENT as e (e.key)}
+                        <button class="chip" aria-pressed={env[e.key]} onclick={() => (env[e.key] = !env[e.key])}>{e.label}</button>
+                    {/each}
+                </div>
+            </section>
+        </div>
+
+        <footer class="panel-foot">
+            <span class="status">svelte/demo/App.svelte</span>
+            <a class="btn ghost" href={GUIDE} target="_blank" rel="noreferrer">API guide<Icon name="external" /></a>
+        </footer>
+    </Glass>
+</GlassCanvas>
