@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GlassRender demo</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #101418; overflow: hidden; font: 13px system-ui, sans-serif; color: #dde3e8; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+  #hud { position: fixed; left: 12px; bottom: 10px; right: 12px; padding: 6px 10px; border-radius: 8px; background: rgba(0, 0, 0, .55); pointer-events: none; line-height: 1.5; }
+  #state { opacity: .75; }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="hud">끌어서 이동 · 휠로 크기 · D 어둡게/밝게 · B 배경 · T 틴트 · H 숨기기/보이기 · P 누름 · L 빛이 포인터를 따라감 · S 겹침 방식<br>
+A 강조 버튼 · [ ] 프리셋 바꾸기 · R 투명 유리 색수차 · I 비활성 창 · N 틴트 설정 · O 투명도 줄이기 · C 대비 증가 · M 동작 줄이기 · X 확장 범위 · K 컨텍스트 잃기(1초 뒤 복구)<br><span id="state"></span></div>
+<script type="module">
+import { PRESET_NAMES, createGlass } from "../dist/index.js";
+
+const canvas = document.getElementById("view");
+const hud = document.getElementById("hud");
+const stateLine = document.getElementById("state");
+const rainbowMaterial = { aberration: { amount: 12, height: 40, angle: Math.PI / 2 }, margin: 24 };
+
+// a painted backdrop: the glass lays it over the canvas ("cover") and lays it again when the window is resized
+const paint = document.createElement("canvas");
+paint.width = 2400; paint.height = 1600;
+let seed = 1;
+function backdrop() {
+    const c = paint.getContext("2d"), w = paint.width, h = paint.height;
+    let r = seed;
+    const rnd = () => (r = (r * 1664525 + 1013904223) >>> 0) / 4294967296;
+    const g = c.createLinearGradient(0, 0, w, h);
+    g.addColorStop(0, `hsl(${rnd() * 360}, 60%, 30%)`); g.addColorStop(0.5, `hsl(${rnd() * 360}, 70%, 55%)`); g.addColorStop(1, `hsl(${rnd() * 360}, 60%, 25%)`);
+    c.fillStyle = g; c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 60; i++) {
+        c.fillStyle = `hsla(${rnd() * 360}, 80%, ${30 + rnd() * 50}%, 0.85)`;
+        c.beginPath(); c.arc(rnd() * w, rnd() * h, 20 + rnd() * 180, 0, 7); c.fill();
+    }
+    c.fillStyle = "#fff"; c.font = "600 50px system-ui, sans-serif";
+    for (let i = 0; i < 14; i++) c.fillText("GlassRender  0123456789  유리 재질 렌더러", 40 + (i % 2) * 120, 110 + i * 112);
+    c.strokeStyle = "rgba(0,0,0,.6)"; c.lineWidth = 2;
+    for (let x = 0; x < w; x += 80) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, h); c.stroke(); }
+    // Neutral icons make the RGB separation visible without painting a rainbow into the backdrop.
+    const cover = Math.max(innerWidth / w, innerHeight / h);
+    c.save();
+    c.setTransform(1 / cover, 0, 0, 1 / cover,
+        -(innerWidth - w * cover) / (2 * cover), -(innerHeight - h * cover) / (2 * cover));
+    c.fillStyle = "#181818"; c.fillRect(472, 68, 338, 250);
+    c.fillStyle = "#fff"; c.font = "600 12px system-ui";
+    c.fillText("색수차 비교 · R 켜기/끄기", 486, 88);
+    for (let row = 0; row < 2; row++) for (let col = 0; col < 3; col++) {
+        const x = 486 + col * 104, y = 104 + row * 104;
+        c.fillStyle = "#f6f6f6"; c.beginPath(); c.roundRect(x, y, 88, 88, 20); c.fill();
+        c.fillStyle = "#050505"; c.beginPath(); c.arc(x + 44, y + 44, 32, 0, Math.PI * 2); c.fill();
+        c.fillStyle = "#fff"; c.font = "800 42px system-ui";
+        c.textAlign = "center"; c.textBaseline = "middle";
+        c.fillText(["G", "A", "M"][col], x + 44, y + 44);
+    }
+    c.restore();
+    return paint;
+}
+
+// surroundings: the accessibility settings follow the device unless a key turned them on here
+const env = { active: true, tinted: false, reduceTransparency: "auto", increaseContrast: "auto", reduceMotion: "auto" };
+let range = "auto", note = "", preset = 0, aberrationEnabled = true;
+const made = createGlass(canvas, {
+    appearance: "dark", backdrop: backdrop(), environment: env, extendedRange: range,
+    // the glass rebuilds itself when the context comes back; the page only hears about it
+    onContextLost: () => { note = "컨텍스트를 잃음"; report(); },
+    onContextRestored: (error) => { note = error ? "복구 실패: " + error : "컨텍스트 복구됨"; report(); }
+});
+if (!made.ok) { hud.textContent = made.error; throw new Error(made.error); }
+const glass = made.value;
+
+function report() {
+    const e = glass.environment, names = ["비활성 창", "틴트 설정", "투명도 줄이기", "대비 증가", "동작 줄이기"].filter((_, i) => e & (1 << i));
+    stateLine.textContent = "프리셋: " + PRESET_NAMES[preset] + " · 투명 유리 색수차: " + (aberrationEnabled ? "켬" : "끔") + " · 환경: " + (names.join(", ") || "기본") + " · 확장 범위: " + (glass.extendedRange ? "켬" : "끔") + (note ? " · " + note : "");
+}
+
+// each entry: the object that draws it and its rectangle (for dragging)
+const items = [
+    { rect: { x: 80, y: 90, width: 380, height: 240 }, make: (r) => glass.add({ ...r, radius: 40 }) },
+    { rect: { x: 140, y: 150, width: 44, height: 44 }, make: (r) => glass.add(r) },              // small: its tone follows what is behind it
+    { rect: { x: 200, y: 150, width: 150, height: 44 }, make: (r) => glass.add(r) },
+    { rect: { x: 500, y: 100, width: 240, height: 180 }, make: (r) => glass.add({ ...r, radius: 44, preset: "clear", material: rainbowMaterial }) },
+    { rect: { x: 500, y: 320, width: 240, height: 130 }, make: (r) => glass.add({ ...r, radius: [60, 14, 60, 14] }) },
+];
+for (const it of items) it.shape = it.make(it.rect);
+
+// a group: two outlines that flow into each other when they come within 40 px (the second has a radius per corner)
+const group = glass.addGroup({ spacing: 40 });
+const members = [group.add({ x: 120, y: 380, width: 120, height: 120 }), group.add({ x: 220, y: 400, width: 150, height: 80, radius: [40, 12, 40, 12] })];
+const groupItem = { rect: { x: 120, y: 380, width: 250, height: 120 }, group: true };
+items.push(groupItem);
+
+// any outline: a star from a mask four times finer than shown
+function starMask(size) {
+    const c = document.createElement("canvas");
+    c.width = c.height = size;
+    const g = c.getContext("2d");
+    g.beginPath();
+    for (let i = 0; i < 10; i++) {
+        const r = size / 2 * (i % 2 ? 0.45 : 1), a = Math.PI * i / 5 - Math.PI / 2;
+        g.lineTo(size / 2 + r * Math.cos(a), size / 2 + r * Math.sin(a));
+    }
+    g.closePath(); g.fillStyle = "#fff"; g.fill();
+    return c;
+}
+const star = { rect: { x: 760, y: 90, width: 200, height: 200 } };
+star.shape = glass.add({ ...star.rect, mask: starMask(800) });
+items.push(star);
+report();
+
+let dark = true, tinted = false, prominent = false, flat = false, follow = false, panelShown = true, held = null, px = 0, py = 0;
+const hit = (x, y) => [...items].reverse().find((it) => x >= it.rect.x && x <= it.rect.x + it.rect.width && y >= it.rect.y && y <= it.rect.y + it.rect.height) || null;
+
+function place(it) {
+    const r = it.rect;
+    if (it.shape) it.shape.set(r);
+    else if (it.group) { members[0].move(r.x, r.y); members[1].move(r.x + 100 + it.pull, r.y + 20); }
+}
+groupItem.pull = 0;
+
+canvas.addEventListener("pointerdown", (e) => {
+    held = hit(e.clientX, e.clientY);
+    if (held) { px = e.clientX; py = e.clientY; canvas.setPointerCapture(e.pointerId); }
+});
+canvas.addEventListener("pointermove", (e) => {
+    // the lights turn toward the pointer, as a tilted screen would turn them
+    if (follow) glass.setLightAngle(Math.atan2(e.clientX - innerWidth / 2, innerHeight / 2 - e.clientY) + Math.PI / 4);
+    if (!held) return;
+    const dx = e.clientX - px, dy = e.clientY - py;
+    px = e.clientX; py = e.clientY;
+    held.rect.x += dx; held.rect.y += dy;
+    // the second member of the group trails horizontally, so the two outlines pull apart and merge again
+    if (held.group) held.pull = Math.max(-60, Math.min(80, held.pull + dx * 0.6));
+    place(held);
+});
+canvas.addEventListener("pointerup", () => { held = null; if (groupItem.pull !== 0) { groupItem.pull = 0; place(groupItem); } });
+canvas.addEventListener("wheel", (e) => {
+    const it = hit(e.clientX, e.clientY);
+    if (!it || !it.shape) return;
+    e.preventDefault();
+    const k = Math.exp(-e.deltaY * 0.0015), r = it.rect, cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+    r.width = Math.max(16, r.width * k); r.height = Math.max(16, r.height * k); r.x = cx - r.width / 2; r.y = cy - r.height / 2;
+    place(it);
+}, { passive: false });
+window.addEventListener("keydown", (e) => {
+    const k = e.key.toLowerCase(), panel = items[0].shape, pill = items[2].shape;
+    if (k === "d") { dark = !dark; glass.setAppearance(dark ? "dark" : "light"); }
+    if (k === "b") { seed++; glass.setBackdrop(backdrop()); }
+    if (k === "t") { tinted = !tinted; pill.set({ tint: tinted ? [0.1, 0.55, 1, 0.6] : null }); }
+    if (k === "h") { panelShown = !panelShown; panel.set({ visible: panelShown }); }
+    if (k === "p") pill.press(true);
+    if (k === "l") { follow = !follow; if (!follow) glass.setLightAngle(0); }
+    if (k === "s") { flat = !flat; glass.setStacking(flat ? "flat" : "exact"); }
+    if (k === "r") {
+        aberrationEnabled = !aberrationEnabled;
+        items[3].shape.set({ material: aberrationEnabled ? rainbowMaterial : null });
+    }
+    // the look of a primary control: the accent colour at full strength
+    if (k === "a") { prominent = !prominent; pill.set({ preset: prominent ? "prominent" : PRESET_NAMES[preset] }); }
+    // the materials of other surfaces and controls: the panel, the two controls on it, the four-radius card and the group
+    if (k === "[" || k === "]") {
+        preset = (preset + (k === "]" ? 1 : PRESET_NAMES.length - 1)) % PRESET_NAMES.length;
+        const name = PRESET_NAMES[preset];
+        for (const i of [0, 1, 4]) items[i].shape.set({ preset: name });
+        if (!prominent) pill.set({ preset: name });
+        group.set({ preset: name });
+    }
+    if (k === "i") { env.active = !env.active; glass.setEnvironment(env); }
+    if (k === "n") { env.tinted = !env.tinted; glass.setEnvironment(env); }
+    if (k === "o") { env.reduceTransparency = env.reduceTransparency === true ? "auto" : true; glass.setEnvironment(env); }
+    if (k === "c") { env.increaseContrast = env.increaseContrast === true ? "auto" : true; glass.setEnvironment(env); }
+    if (k === "m") { env.reduceMotion = env.reduceMotion === true ? "auto" : true; glass.setEnvironment(env); }
+    if (k === "x") { range = range === true ? false : true; glass.setExtendedRange(range); }
+    if (k === "k") {
+        // lose the context on purpose; the browser gives it back when asked a moment later
+        const lose = canvas.getContext("webgl2").getExtension("WEBGL_lose_context");
+        if (lose) { lose.loseContext(); setTimeout(() => lose.restoreContext(), 1000); }
+    }
+    note = k === "k" ? note : "";
+    report();
+});
+window.addEventListener("keyup", (e) => { if (e.key.toLowerCase() === "p") items[2].shape.press(false); });
+window.addEventListener("resize", () => glass.setBackdrop(backdrop()));
+</script>
+</body>
+</html>

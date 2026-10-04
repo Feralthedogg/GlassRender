@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="data:,">
+    <title>GlassRender browser quick start</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+    </style>
+</head>
+<body>
+    <canvas id="glass"></canvas>
+    <script type="module">
+        import { createGlass } from "../dist/index.js";
+
+        const backdrop = "data:image/svg+xml," + encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800">' +
+            '<rect width="1200" height="800" fill="#163350"/>' +
+            '<circle cx="350" cy="300" r="260" fill="#7960e8"/>' +
+            '<path d="M0 600L1200 200V800H0Z" fill="#e58c53"/>' +
+            '<path d="M0 0L1200 800M0 200L900 800" stroke="white" stroke-width="24"/>' +
+            '</svg>'
+        );
+        const image = new Image();
+        image.src = backdrop;
+        await image.decode();
+
+        const canvas = document.getElementById("glass");
+        const result = createGlass(canvas, { backdrop: image });
+        if (!result.ok) throw new Error(result.error);
+
+        const glass = result.value;
+        const panel = glass.add({
+            x: 40, y: 40, width: 320, height: 160,
+            radius: 24, preset: "standard",
+        });
+        panel.set({ x: 64 });
+        window.addEventListener("pagehide", () => glass.destroy(), { once: true });
+    </script>
+</body>
+</html>

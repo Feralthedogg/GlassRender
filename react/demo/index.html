@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GlassRender React demo</title>
+<style>
+  html, body { margin: 0; min-height: 100%; background: #0d1014; font: 15px/1.45 system-ui, sans-serif; }
+  main { min-height: 100vh; padding: 28px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; gap: 28px; }
+  .toolbar { display: flex; gap: 12px; }
+  .tool { width: 44px; height: 44px; display: grid; place-items: center; user-select: none; }
+  .tool.wide { width: 84px; }
+  .card { width: min(560px, 90vw); padding: 26px 30px; box-sizing: border-box; }
+  .card h1 { margin: 0 0 8px; font-size: 30px; }
+  .card p { margin: 0 0 18px; }
+  .row { display: flex; gap: 14px; }
+  .fade { transition: opacity .5s; }
+  .fade.gone { opacity: 0; }
+  .button { padding: 10px 26px; user-select: none; cursor: pointer; color: var(--glass-title); }
+  .button.primary { font-weight: 600; }
+  .panel { padding: 14px 18px; max-width: min(900px, 94vw); }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .controls span { opacity: .8; margin: 0 4px 0 10px; }
+  .controls button, .controls select { font: inherit; color: inherit; background: rgba(127, 127, 127, .18); border: 0; border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+  .controls button.on { background: rgba(127, 127, 127, .45); }
+  .puck { position: fixed; width: 56px; height: 56px; display: grid; place-items: center; cursor: grab; touch-action: none; user-select: none; font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script type="module" src="./main.tsx"></script>
+</body>
+</html>
