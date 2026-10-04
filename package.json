@@ -1,6 +1,6 @@
 {
     "name": "glassrender",
-    "version": "0.6.0",
+    "version": "0.1.0-beta",
     "description": "Real-time refractive glass material renderer for WebGL2.",
     "type": "module",
     "sideEffects": false,

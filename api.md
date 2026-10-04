@@ -1,6 +1,6 @@
 # GlassRender API Guide
 
-GlassRender draws glass on a browser canvas by applying blur, refraction, rim lights and shadows to a supplied backdrop. This guide covers the public API in this checkout: `glassrender` 0.6.0 and its React 0.2.0, Svelte 0.4.0 and Vue 0.2.0 adapters.
+GlassRender draws glass on a browser canvas by applying blur, refraction, rim lights and shadows to a supplied backdrop. This guide covers the public API in this checkout: `glassrender` 0.1.0 Beta and its React, Svelte and Vue adapters, all at version `0.1.0-beta`.
 
 To get started, create a canvas with `createGlass()` and add a piece of glass with `glass.add()`. In a React, Svelte or Vue app, place `Glass` components inside `GlassCanvas`. The components follow their DOM boxes, so you do not have to calculate their positions and sizes yourself.
 

@@ -9,7 +9,7 @@
 Blur, refraction, rim light, shadow and colour fringes over any image, canvas or video,<br>
 with React, Svelte and Vue components that keep the glass under your layout.
 
-[![version](https://img.shields.io/badge/version-0.6.0-8a5cff?style=flat-square)](package.json)
+[![version](https://img.shields.io/badge/version-0.1.0_Beta-8a5cff?style=flat-square)](package.json)
 [![WebGL2](https://img.shields.io/badge/WebGL2-renderer-3d8bff?style=flat-square)](#browser-support)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?style=flat-square)](src)
 [![runtime dependencies](https://img.shields.io/badge/runtime_dependencies-0-2ea44f?style=flat-square)](package.json)
@@ -136,9 +136,9 @@ Every option, the presets, groups, masks, custom materials and the low-level ren
 
 | Package | Version | Requires |
 | --- | --- | --- |
-| [`glassrender-react`](react) | 0.2.0 | React 18 or later |
-| [`glassrender-svelte`](svelte) | 0.4.0 | Svelte 5 |
-| [`glassrender-vue`](vue) | 0.2.0 | Vue 3.4 or later |
+| [`glassrender-react`](react) | 0.1.0 Beta | React 18 or later |
+| [`glassrender-svelte`](svelte) | 0.1.0 Beta | Svelte 5 |
+| [`glassrender-vue`](vue) | 0.1.0 Beta | Vue 3.4 or later |
 
 The three adapters share one model. `GlassCanvas` owns the canvas and the render loop, each `Glass` inside it draws glass under its own box, and `GlassGroup` merges the boxes inside it into one piece of glass. With `fixed={false}` (`:fixed="false"` in Vue), the canvas stays inside a container of your own size.
 
@@ -300,23 +300,23 @@ The playground has every shape kind, preset, environment setting and chromatic a
 Create the core archive and the archive of your adapter in this checkout. Each adapter command installs the adapter's dependencies and builds it before packing:
 
 ```sh
-npm pack                            # glassrender-0.6.0.tgz
-(cd react && npm ci && npm pack)    # react/glassrender-react-0.2.0.tgz
-(cd svelte && npm ci && npm pack)   # svelte/glassrender-svelte-0.4.0.tgz
-(cd vue && npm ci && npm pack)      # vue/glassrender-vue-0.2.0.tgz
+npm pack                            # glassrender-0.1.0-beta.tgz
+(cd react && npm ci && npm pack)    # react/glassrender-react-0.1.0-beta.tgz
+(cd svelte && npm ci && npm pack)   # svelte/glassrender-svelte-0.1.0-beta.tgz
+(cd vue && npm ci && npm pack)      # vue/glassrender-vue-0.1.0-beta.tgz
 ```
 
 Then install the core together with your adapter, from an app next to the `GlassRender` directory:
 
 ```sh
 # React
-npm install ../GlassRender/glassrender-0.6.0.tgz ../GlassRender/react/glassrender-react-0.2.0.tgz
+npm install ../GlassRender/glassrender-0.1.0-beta.tgz ../GlassRender/react/glassrender-react-0.1.0-beta.tgz
 
 # Svelte
-npm install ../GlassRender/glassrender-0.6.0.tgz ../GlassRender/svelte/glassrender-svelte-0.4.0.tgz
+npm install ../GlassRender/glassrender-0.1.0-beta.tgz ../GlassRender/svelte/glassrender-svelte-0.1.0-beta.tgz
 
 # Vue
-npm install ../GlassRender/glassrender-0.6.0.tgz ../GlassRender/vue/glassrender-vue-0.2.0.tgz
+npm install ../GlassRender/glassrender-0.1.0-beta.tgz ../GlassRender/vue/glassrender-vue-0.1.0-beta.tgz
 ```
 
 The framework itself must already be installed in the app. Keep your entry point and import `GlassCanvas` and `Glass` as in the examples above.

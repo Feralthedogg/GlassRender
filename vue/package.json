@@ -1,6 +1,6 @@
 {
     "name": "glassrender-vue",
-    "version": "0.2.0",
+    "version": "0.1.0-beta",
     "description": "Vue components for the GlassRender glass material renderer.",
     "type": "module",
     "sideEffects": false,
@@ -25,7 +25,7 @@
         "build:demo": "vite build --config vite.config.js"
     },
     "peerDependencies": {
-        "glassrender": "^0.6.0",
+        "glassrender": "^0.1.0-beta",
         "vue": "^3.4.0"
     },
     "devDependencies": {
