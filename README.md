@@ -1,5 +1,9 @@
 # GlassRender
 
+GlassRender draws blurred, refractive glass on a WebGL2 canvas. Use the core API for shapes you position yourself, or the React, Svelte and Vue components for glass that follows your page layout.
+
+**[API guide and examples](api.md)** — Start with a runnable example, then explore all options, 29 preset choices, groups, masks, custom materials, framework components and the low-level renderer.
+
 ## Build the checkout
 
 Use Node.js 22.12 or later and npm. These instructions build and install local packages from this checkout.
