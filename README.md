@@ -1,33 +1,84 @@
-# GlassRender
+<div align="center">
 
-GlassRender draws blurred, refractive glass on a WebGL2 canvas. Use the core API for shapes you position yourself, or the React, Svelte and Vue components for glass that follows your page layout.
+<img src=".github/assets/reel.gif" width="880" alt="GlassRender: a lens passing over the wordmark, light travelling round a capsule, a clock cut from glass, playback controls over poppies, a sliding tab selector, a button opening into a menu, tinted buttons popping in, small glass turning light and dark over scrolling content, and glass flowing together">
 
-**[API guide and examples](api.md)** — Start with a runnable example, then explore all options, 29 preset choices, groups, masks, custom materials, framework components and the low-level renderer.
+<br>
 
-## Build the checkout
+**Real-time refractive glass for the web, drawn on a WebGL2 canvas.**
 
-Use Node.js 22.12 or later and npm. These instructions build and install local packages from this checkout.
+Blur, refraction, rim light, shadow and colour fringes over any image, canvas or video,<br>
+with React, Svelte and Vue components that keep the glass under your layout.
+
+[![version](https://img.shields.io/badge/version-0.6.0-8a5cff?style=flat-square)](package.json)
+[![WebGL2](https://img.shields.io/badge/WebGL2-renderer-3d8bff?style=flat-square)](#browser-support)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?style=flat-square)](src)
+[![runtime dependencies](https://img.shields.io/badge/runtime_dependencies-0-2ea44f?style=flat-square)](package.json)
+[![license](https://img.shields.io/badge/license-MIT-ff6f91?style=flat-square)](LICENSE)
+
+[Quick start](#quick-start) · [Showcase](#showcase) · [Frameworks](#frameworks) · [Demos](#demos) · [API guide](api.md)
+
+</div>
+
+## Features
+
+- **Refraction, blur and light.** Every pixel of glass refracts, blurs and lights the backdrop you supply: an image, a canvas or a playing video.
+- **29 materials.** `standard`, `clear`, `prominent`, `menu`, `sidebar`, `dock`, `widget` and more, each adapting to its size, to light or dark, and to the surroundings.
+- **Glass that follows the DOM.** `Glass` components for React, Svelte and Vue track their boxes as the page lays out, scrolls, resizes and animates.
+- **Groups and masks.** Neighbouring shapes flow into one piece of glass, and any alpha mask becomes an outline.
+- **Chromatic aberration.** Rim fringes and a lens layer, tunable on any material.
+- **Accessibility settings.** Follows reduced transparency, increased contrast and reduced motion, or set them yourself.
+- **No runtime dependencies.** One WebGL2 context, recovery from context loss, and extended-range output on HDR screens.
+
+## Showcase
+
+<img src=".github/assets/hero.jpg" alt="The React component demo: a glass card, a music player, a merged toolbar and a settings panel over an aurora wallpaper">
+
+<p align="center"><sub><b>Component demo</b>: glass under ordinary DOM boxes, a toolbar that merges, cards you can drag, and a notification moved by CSS</sub></p>
+
+<table>
+<tr>
+<td width="50%"><img src=".github/assets/playground.jpg" alt="The core playground: clear glass with colour fringes over large lettering"></td>
+<td width="50%"><img src=".github/assets/light.jpg" alt="The Svelte component demo in light appearance over a geometric poster"></td>
+</tr>
+<tr>
+<td align="center"><sub><b>Core playground</b>: shapes, materials and colour fringes</sub></td>
+<td align="center"><sub><b>Light appearance</b>: the same demo in Svelte</sub></td>
+</tr>
+</table>
+
+## Quick start
+
+GlassRender is built from this repository. You need Node.js 22.12 or later and npm:
 
 ```sh
 git clone https://github.com/Feralthedogg/GlassRender
 cd GlassRender
 npm ci
-npm run build
+npm run build    # builds the core into dist/
+npm run demo     # serves the examples at http://127.0.0.1:5173/examples/
 ```
 
-Build the core before running or packaging a framework adapter.
+Then draw glass on a canvas of your own:
 
-## Run the browser example
+```js
+import { createGlass } from "glassrender";
 
-From the repository root:
+// The picture the glass refracts: an image, a canvas or a video.
+const made = createGlass(document.querySelector("canvas"), { backdrop: image });
+if (!made.ok) throw new Error(made.error);
 
-```sh
-npm run demo
+const glass = made.value;
+const panel = glass.add({ x: 40, y: 40, width: 320, height: 160, radius: 24, preset: "standard" });
+
+// set() changes only what you pass and schedules the next frame.
+panel.set({ tint: [0.2, 0.6, 1, 0.2] });
 ```
 
-Open [http://127.0.0.1:5173/examples/quick-start.html](http://127.0.0.1:5173/examples/quick-start.html). The playground at [http://127.0.0.1:5173/examples/](http://127.0.0.1:5173/examples/) has every shape kind, preset, environment setting and chromatic aberration control of the core API.
+Coordinates are CSS pixels from the top-left corner of the canvas. The backdrop is yours to supply: GlassRender does not capture the page behind the canvas.
 
-The complete example is `examples/quick-start.html`. It defines the canvas size, supplies its own backdrop, and imports the built browser module. Serve it over HTTP.
+<details>
+<summary><b>The complete page</b>, <code>examples/quick-start.html</code></summary>
+<br>
 
 ```html
 <!doctype html>
@@ -75,11 +126,27 @@ The complete example is `examples/quick-start.html`. It defines the canvas size,
 </html>
 ```
 
-Coordinates and sizes are in CSS pixels relative to the canvas. The backdrop is supplied explicitly as an image, canvas, or video.
+Serve it over HTTP: run `npm run demo` and open http://127.0.0.1:5173/examples/quick-start.html.
 
-## React
+</details>
 
-Requires React 18 or later. Run these commands from the repository root:
+Every option, the presets, groups, masks, custom materials and the low-level renderer are described in the **[API guide](api.md)**.
+
+## Frameworks
+
+| Package | Version | Requires |
+| --- | --- | --- |
+| [`glassrender-react`](react) | 0.2.0 | React 18 or later |
+| [`glassrender-svelte`](svelte) | 0.4.0 | Svelte 5 |
+| [`glassrender-vue`](vue) | 0.2.0 | Vue 3.4 or later |
+
+The three adapters share one model. `GlassCanvas` owns the canvas and the render loop, each `Glass` inside it draws glass under its own box, and `GlassGroup` merges the boxes inside it into one piece of glass. With `fixed={false}` (`:fixed="false"` in Vue), the canvas stays inside a container of your own size.
+
+Build the core first (see [Quick start](#quick-start)), then run the commands of your framework from the repository root.
+
+<details open>
+<summary><b>React</b></summary>
+<br>
 
 ```sh
 npm --prefix react ci
@@ -87,9 +154,7 @@ npm --prefix react run build
 npm --prefix react run demo -- --host 127.0.0.1 --strictPort
 ```
 
-Open [http://127.0.0.1:5175/quick-start.html](http://127.0.0.1:5175/quick-start.html). The full component demo is at [http://127.0.0.1:5175/](http://127.0.0.1:5175/).
-
-`react/demo/quick-start.html` provides `#app` and loads this complete entry point, `react/demo/quick-start.tsx`:
+Open http://127.0.0.1:5175/quick-start.html, or http://127.0.0.1:5175/ for the full demo. `react/demo/quick-start.html` provides `#app` and loads `react/demo/quick-start.tsx`:
 
 ```tsx
 import { StrictMode } from "react";
@@ -123,9 +188,11 @@ if (!container) throw new Error("The #app element is missing.");
 createRoot(container).render(<StrictMode><App /></StrictMode>);
 ```
 
-## Svelte
+</details>
 
-Requires Svelte 5. Run these commands from the repository root:
+<details>
+<summary><b>Svelte</b></summary>
+<br>
 
 ```sh
 npm --prefix svelte ci
@@ -133,9 +200,7 @@ npm --prefix svelte run package
 npm --prefix svelte run demo -- --host 127.0.0.1 --strictPort
 ```
 
-Open [http://127.0.0.1:5174/quick-start.html](http://127.0.0.1:5174/quick-start.html). The full component demo is at [http://127.0.0.1:5174/](http://127.0.0.1:5174/).
-
-`svelte/demo/quick-start.html` provides `#app`. Its entry point mounts `svelte/demo/QuickStart.svelte`:
+Open http://127.0.0.1:5174/quick-start.html, or http://127.0.0.1:5174/ for the full demo. `svelte/demo/quick-start.html` provides `#app`, and its entry point mounts `svelte/demo/QuickStart.svelte`:
 
 ```ts
 import { mount } from "svelte";
@@ -170,9 +235,11 @@ mount(QuickStart, { target });
 </GlassCanvas>
 ```
 
-## Vue
+</details>
 
-Requires Vue 3.4 or later. Run these commands from the repository root:
+<details>
+<summary><b>Vue</b></summary>
+<br>
 
 ```sh
 npm --prefix vue ci
@@ -180,9 +247,7 @@ npm --prefix vue run build
 npm --prefix vue run demo -- --host 127.0.0.1 --strictPort
 ```
 
-Open [http://127.0.0.1:5176/quick-start.html](http://127.0.0.1:5176/quick-start.html). The full component demo is at [http://127.0.0.1:5176/](http://127.0.0.1:5176/).
-
-`vue/demo/quick-start.html` provides `#app`. Its entry point mounts `vue/demo/QuickStart.vue`:
+Open http://127.0.0.1:5176/quick-start.html, or http://127.0.0.1:5176/ for the full demo. `vue/demo/quick-start.html` provides `#app`, and its entry point mounts `vue/demo/QuickStart.vue`:
 
 ```ts
 import { createApp } from "vue";
@@ -217,30 +282,31 @@ const backdrop = "data:image/svg+xml," + encodeURIComponent(
 </template>
 ```
 
-All three examples include their own SVG backdrop. `GlassCanvas` manages the canvas and render loop; `Glass` follows its DOM box. Use `fixed={false}` in React/Svelte or `:fixed="false"` in Vue to keep the canvas inside a container with a defined size.
+</details>
+
+## Demos
+
+| Demo | Source | Address |
+| --- | --- | --- |
+| Core playground | [`examples/index.html`](examples/index.html) | http://127.0.0.1:5173/examples/ |
+| React | [`react/demo/App.tsx`](react/demo/App.tsx) | http://127.0.0.1:5175/ |
+| Svelte | [`svelte/demo/App.svelte`](svelte/demo/App.svelte) | http://127.0.0.1:5174/ |
+| Vue | [`vue/demo/App.vue`](vue/demo/App.vue) | http://127.0.0.1:5176/ |
+
+The playground has every shape kind, preset, environment setting and chromatic aberration control of the core API. The component demos show the same page in each framework, with cards you can drag around. Start them with the commands above.
 
 ## Install into an existing app
 
-From the repository root, create the core archive after the checkout setup above:
+Create the core archive and the archive of your adapter in this checkout. Each adapter command installs the adapter's dependencies and builds it before packing:
 
 ```sh
-npm pack
+npm pack                            # glassrender-0.6.0.tgz
+(cd react && npm ci && npm pack)    # react/glassrender-react-0.2.0.tgz
+(cd svelte && npm ci && npm pack)   # svelte/glassrender-svelte-0.4.0.tgz
+(cd vue && npm ci && npm pack)      # vue/glassrender-vue-0.2.0.tgz
 ```
 
-Then run the matching adapter command. Each command installs its dependencies and automatically builds the package before creating its archive:
-
-```sh
-# React
-(cd react && npm ci && npm pack)
-
-# Svelte
-(cd svelte && npm ci && npm pack)
-
-# Vue
-(cd vue && npm ci && npm pack)
-```
-
-Run the matching install command from an existing app next to the `GlassRender` directory. Install the core archive and adapter archive together:
+Then install the core together with your adapter, from an app next to the `GlassRender` directory:
 
 ```sh
 # React
@@ -253,4 +319,23 @@ npm install ../GlassRender/glassrender-0.6.0.tgz ../GlassRender/svelte/glassrend
 npm install ../GlassRender/glassrender-0.6.0.tgz ../GlassRender/vue/glassrender-vue-0.2.0.tgz
 ```
 
-Keep your app's existing entry point and use the `GlassCanvas` and `Glass` imports shown above in your component. The framework must already be installed in that app. The examples run in a browser with WebGL2 support.
+The framework itself must already be installed in the app. Keep your entry point and import `GlassCanvas` and `Glass` as in the examples above.
+
+## Project layout
+
+```text
+src/        the engine: materials, presets, the WebGL2 renderer and createGlass
+react/      glassrender-react, with its demo in react/demo
+svelte/     glassrender-svelte, with its demo in svelte/demo
+vue/        glassrender-vue, with its demo in vue/demo
+examples/   the core playground, the quick start and the assets the demos share
+api.md      the API guide
+```
+
+## Browser support
+
+GlassRender runs wherever WebGL2 does. Mask outlines need `EXT_color_buffer_float`, and extended-range output needs a screen and a browser that support it. When WebGL2 is missing, `createGlass` returns an error instead of throwing.
+
+## License
+
+[MIT](LICENSE) © 2026 Feralthedogg

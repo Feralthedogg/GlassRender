@@ -8,6 +8,7 @@
 !/tsconfig.build.json
 !/src/
 !/api.md
+!/.github/
 
 # Runnable examples and their local package sources.
 !/examples/
@@ -46,3 +47,6 @@
 !/vue/tsconfig.json
 !/vue/tsconfig.build.json
 !/vue/vite.config.js
+
+# Finder metadata
+.DS_Store
