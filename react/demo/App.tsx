@@ -1,8 +1,9 @@
 // The component demo: a small page built from glass components, with a panel of settings on the side.
-import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactElement } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type PointerEvent, type ReactElement } from "react";
 import { PRESET_NAMES, packPreset, presetNumber, type Appearance, type Preset, type ShownScheme } from "glassrender";
 import { Glass, GlassCanvas, GlassGroup } from "../src/index.js";
 import { BACKDROPS, backdropThumbnail, screenBackdrop } from "../../examples/shared/backdrops.js";
+import { drag, type Point } from "../../examples/shared/drag.js";
 import { icon, type IconName } from "../../examples/shared/icons.js";
 import {
     ACCENTS, ENVIRONMENT, LENS_DEFAULT, LENS_FIELDS, RIM_DEFAULT, RIM_FIELDS, TINTS, cssColor, fringeMaterial, materialCode, presetOrder,
@@ -18,6 +19,10 @@ const GUIDE = "https://github.com/Feralthedogg/GlassRender/blob/main/api.md#reac
 // the largest surface, the card, is about this many points on its short side
 const SURFACE_SIDE = 360;
 type Environment = Record<EnvironmentChoice["key"], boolean>;
+// the boxes you can drag, and how far each one has been moved from its place in the layout
+type Widget = "toolbar" | "hero" | "player";
+const HOME: Record<Widget, Point> = { toolbar: { x: 0, y: 0 }, hero: { x: 0, y: 0 }, player: { x: 0, y: 0 } };
+const shift = (p: Point): CSSProperties => ({ translate: `${p.x}px ${p.y}px` });
 
 // the capture margin a preset gets on its own (the third info value of its packed block); fringes reach further
 const packed = new Float32Array(200), info = new Float32Array(6);
@@ -90,7 +95,7 @@ export function App(): ReactElement {
     const [elapsed, setElapsed] = useState(84);
     const [toast, setToast] = useState<"" | "enter" | "shown" | "leave">("");
     const [sheetOpen, setSheetOpen] = useState(false);
-    const drag = useRef({ on: false, dx: 0, dy: 0 });
+    const [offsets, setOffsets] = useState(HOME);
 
     const tintColour = TINTS[tint]?.rgba ?? null;
     // one material object for the surfaces, made again only when a setting changes
@@ -140,14 +145,9 @@ export function App(): ReactElement {
         if (toast === "leave") { const t = setTimeout(() => setToast(""), 450); return () => clearTimeout(t); }
     }, [toast]);
 
-    const grab = (e: PointerEvent<HTMLDivElement>): void => {
-        drag.current = { on: true, dx: e.clientX - puck.x, dy: e.clientY - puck.y };
-        e.currentTarget.setPointerCapture(e.pointerId);
-    };
-    const pull = (e: PointerEvent<HTMLDivElement>): void => {
-        const d = drag.current;
-        if (d.on) setPuck({ x: e.clientX - d.dx, y: e.clientY - d.dy });
-    };
+    // a widget moves by a CSS translation; its glass measures the box on every frame (`everyFrame`), so it keeps up
+    const grab = (key: Widget) => (e: PointerEvent<HTMLElement>): void => drag(e, offsets[key], (to) => setOffsets((o) => ({ ...o, [key]: to })));
+    const moved = Object.values(offsets).some((p) => p.x !== 0 || p.y !== 0);
 
     return (
         <GlassCanvas backdrop={backdrop} appearance={appearance} lightAngle={angle * Math.PI / 180} accent={ACCENTS[accent]?.rgb ?? [0, 0.478, 1]}
@@ -156,34 +156,36 @@ export function App(): ReactElement {
             <main className="stage">
                 {/* one piece of glass for three boxes: neighbours closer than `spacing` flow into each other */}
                 <GlassGroup spacing={24} preset={preset} tint={tintColour} material={fringes}>
-                    <nav className="toolbar" aria-label="Material">
-                        <Glass className="tool"><button aria-label="Previous material" onClick={() => step(-1)}><Icon name="left" /></button></Glass>
-                        <Glass className="tool wide"><button onClick={() => step(1)}><Icon name="layers" />{preset}</button></Glass>
-                        <Glass className="tool"><button aria-label="Next material" onClick={() => step(1)}><Icon name="right" /></button></Glass>
+                    <nav className="toolbar draggable" aria-label="Material" style={shift(offsets.toolbar)} onPointerDown={grab("toolbar")}>
+                        <Glass className="tool" everyFrame><button aria-label="Previous material" onClick={() => step(-1)}><Icon name="left" /></button></Glass>
+                        <Glass className="tool wide" everyFrame><button onClick={() => step(1)}><Icon name="layers" />{preset}</button></Glass>
+                        <Glass className="tool" everyFrame><button aria-label="Next material" onClick={() => step(1)}><Icon name="right" /></button></Glass>
                     </nav>
                 </GlassGroup>
 
                 <div className="scene">
-                    <Glass className="hero" radius={30} preset={preset} tint={tintColour} material={fringes} visible={cardShown}>
+                    <Glass className="hero draggable" radius={30} preset={preset} tint={tintColour} material={fringes} visible={cardShown} everyFrame
+                        style={shift(offsets.hero)} onPointerDown={grab("hero")}>
                         <div className={cardShown ? "fade" : "fade gone"}>
                             <span className="eyebrow">React components</span>
                             <h1>Glass that follows your layout.</h1>
                             <p>
                                 Every surface here is an ordinary element. <code>&lt;Glass&gt;</code> draws refractive glass under its box on one
-                                shared WebGL2 canvas and keeps it there as the page lays out, scrolls and resizes.
+                                shared WebGL2 canvas and keeps it there as the page lays out, scrolls and resizes. Drag a card to move it.
                             </p>
                             <div className="actions">
-                                <Glass className="cta" interactive preset="prominent" radius={24} visible={cardShown}>
+                                <Glass className="cta" interactive preset="prominent" radius={24} visible={cardShown} everyFrame>
                                     <button type="button" onClick={() => setToast(toast === "" ? "enter" : toast)}><Icon name="bell" />Show a notification</button>
                                 </Glass>
-                                <Glass className="cta" interactive preset={preset} radius={24} visible={cardShown}>
+                                <Glass className="cta" interactive preset={preset} radius={24} visible={cardShown} everyFrame>
                                     <a href={GUIDE} target="_blank" rel="noreferrer"><Icon name="book" />API guide</a>
                                 </Glass>
                             </div>
                         </div>
                     </Glass>
 
-                    <Glass className="player" radius={26} preset={preset} tint={tintColour} material={fringes}>
+                    <Glass className="player draggable" radius={26} preset={preset} tint={tintColour} material={fringes} everyFrame
+                        style={shift(offsets.player)} onPointerDown={grab("player")}>
                         <div className="player-top">
                             <div className="art"><Icon name="music" /></div>
                             <div className="track"><b>Under the Lens</b><span>The Rim Lights</span></div>
@@ -203,7 +205,7 @@ export function App(): ReactElement {
 
             {/* small glass takes the scheme of what is behind it: drag it over light and dark parts of the wallpaper */}
             <Glass className="puck" everyFrame style={{ left: puck.x, top: puck.y }} onScheme={setPuckScheme}
-                onPointerDown={grab} onPointerMove={pull} onPointerUp={() => { drag.current.on = false; }}>
+                onPointerDown={(e) => drag(e, puck, setPuck)}>
                 <span>{puckScheme}</span>
             </Glass>
 
@@ -299,6 +301,10 @@ export function App(): ReactElement {
                                         title={t.name} style={t.rgba ? { ["--c" as string]: cssColor(t.rgba) } : undefined} onClick={() => setTint(i)} />
                                 ))}
                             </div>
+                        </div>
+                        <div className="toggle-row">
+                            <span>Drag the cards to move them</span>
+                            <button className="btn" disabled={!moved} onClick={() => setOffsets(HOME)}>Reset</button>
                         </div>
                         <div className="toggle-row">
                             <span>Show the card</span>

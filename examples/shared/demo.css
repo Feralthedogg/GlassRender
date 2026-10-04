@@ -219,6 +219,7 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 }
 .btn:hover { background: var(--fill-2); }
 .btn:active { transform: translateY(.5px); }
+.btn:disabled { opacity: .4; cursor: default; }
 .btn .icon { width: 16px; height: 16px; }
 .btn.icon-only { width: 32px; padding: 0; }
 .btn.ghost { background: transparent; color: var(--fg-2); }
@@ -444,6 +445,10 @@ a { color: inherit; }
 .tool small { color: var(--fg-2); font-size: 12px; font-weight: 500; }
 
 .scene { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 28px; }
+
+/* boxes the pointer can move: a press that travels a few pixels becomes a drag (see shared/drag.js) */
+.draggable { cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none; }
+html.dragging, html.dragging * { cursor: grabbing !important; }
 
 .hero { width: min(520px, 100%); padding: 30px 32px 30px; }
 .eyebrow {

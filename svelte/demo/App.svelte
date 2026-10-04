@@ -3,6 +3,7 @@
     import { PRESET_NAMES, packPreset, presetNumber, type Appearance, type Preset, type ShownScheme } from "glassrender";
     import { Glass, GlassCanvas, GlassGroup } from "../src/lib/index.js";
     import { BACKDROPS, backdropThumbnail, screenBackdrop } from "../../examples/shared/backdrops.js";
+    import { drag, type Point } from "../../examples/shared/drag.js";
     import type { IconName } from "../../examples/shared/icons.js";
     import {
         ACCENTS, ENVIRONMENT, LENS_DEFAULT, LENS_FIELDS, RIM_DEFAULT, RIM_FIELDS, TINTS, cssColor, fringeMaterial, materialCode, presetOrder,
@@ -52,6 +53,10 @@
     let elapsed = $state(84);
     let toast: "" | "enter" | "shown" | "leave" = $state("");
     let sheetOpen = $state(false);
+    // the boxes you can drag, and how far each one has been moved from its place in the layout
+    type Widget = "toolbar" | "hero" | "player";
+    const home = (): Record<Widget, Point> => ({ toolbar: { x: 0, y: 0 }, hero: { x: 0, y: 0 }, player: { x: 0, y: 0 } });
+    let offsets = $state(home());
 
     const tintColour = $derived(TINTS[tint]?.rgba ?? null);
     // one material object for the surfaces, made again only when a setting changes
@@ -98,16 +103,12 @@
         if (toast === "leave") { const t = setTimeout(() => (toast = ""), 450); return () => clearTimeout(t); }
     });
 
-    let dragging = false, dx = 0, dy = 0;
-    function grab(e: PointerEvent): void {
-        dragging = true;
-        dx = e.clientX - puck.x;
-        dy = e.clientY - puck.y;
-        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    // a widget moves by a CSS translation; its glass measures the box on every frame (`everyFrame`), so it keeps up
+    function grab(key: Widget): (e: PointerEvent) => void {
+        return (e) => drag(e, offsets[key], (to) => (offsets[key] = to));
     }
-    function pull(e: PointerEvent): void {
-        if (dragging) puck = { x: e.clientX - dx, y: e.clientY - dy };
-    }
+    const moved = $derived(Object.values(offsets).some((p) => p.x !== 0 || p.y !== 0));
+    const shift = (p: Point): string => `translate: ${p.x}px ${p.y}px`;
 </script>
 
 <svelte:window onresize={resized} onpointermove={aim} />
@@ -118,34 +119,36 @@
     <main class="stage">
         <!-- one piece of glass for three boxes: neighbours closer than `spacing` flow into each other -->
         <GlassGroup spacing={24} {preset} tint={tintColour} material={fringes}>
-            <nav class="toolbar" aria-label="Material">
-                <Glass class="tool"><button aria-label="Previous material" onclick={() => step(-1)}><Icon name="left" /></button></Glass>
-                <Glass class="tool wide"><button onclick={() => step(1)}><Icon name="layers" />{preset}</button></Glass>
-                <Glass class="tool"><button aria-label="Next material" onclick={() => step(1)}><Icon name="right" /></button></Glass>
+            <nav class="toolbar draggable" aria-label="Material" style={shift(offsets.toolbar)} onpointerdown={grab("toolbar")}>
+                <Glass class="tool" everyFrame><button aria-label="Previous material" onclick={() => step(-1)}><Icon name="left" /></button></Glass>
+                <Glass class="tool wide" everyFrame><button onclick={() => step(1)}><Icon name="layers" />{preset}</button></Glass>
+                <Glass class="tool" everyFrame><button aria-label="Next material" onclick={() => step(1)}><Icon name="right" /></button></Glass>
             </nav>
         </GlassGroup>
 
         <div class="scene">
-            <Glass class="hero" radius={30} {preset} tint={tintColour} material={fringes} visible={cardShown}>
+            <Glass class="hero draggable" radius={30} {preset} tint={tintColour} material={fringes} visible={cardShown} everyFrame
+                style={shift(offsets.hero)} onpointerdown={grab("hero")}>
                 <div class="fade" class:gone={!cardShown}>
                     <span class="eyebrow">Svelte components</span>
                     <h1>Glass that follows your layout.</h1>
                     <p>
                         Every surface here is an ordinary element. <code>&lt;Glass&gt;</code> draws refractive glass under its box on one shared
-                        WebGL2 canvas and keeps it there as the page lays out, scrolls and resizes.
+                        WebGL2 canvas and keeps it there as the page lays out, scrolls and resizes. Drag a card to move it.
                     </p>
                     <div class="actions">
-                        <Glass class="cta" interactive preset="prominent" radius={24} visible={cardShown}>
+                        <Glass class="cta" interactive preset="prominent" radius={24} visible={cardShown} everyFrame>
                             <button type="button" onclick={() => { if (toast === "") toast = "enter"; }}><Icon name="bell" />Show a notification</button>
                         </Glass>
-                        <Glass class="cta" interactive {preset} radius={24} visible={cardShown}>
+                        <Glass class="cta" interactive {preset} radius={24} visible={cardShown} everyFrame>
                             <a href={GUIDE} target="_blank" rel="noreferrer"><Icon name="book" />API guide</a>
                         </Glass>
                     </div>
                 </div>
             </Glass>
 
-            <Glass class="player" radius={26} {preset} tint={tintColour} material={fringes}>
+            <Glass class="player draggable" radius={26} {preset} tint={tintColour} material={fringes} everyFrame
+                style={shift(offsets.player)} onpointerdown={grab("player")}>
                 <div class="player-top">
                     <div class="art"><Icon name="music" /></div>
                     <div class="track"><b>Under the Lens</b><span>The Rim Lights</span></div>
@@ -165,7 +168,7 @@
 
     <!-- small glass takes the scheme of what is behind it: drag it over light and dark parts of the wallpaper -->
     <Glass class="puck" everyFrame style="left: {puck.x}px; top: {puck.y}px" onscheme={(v) => (puckScheme = v)}
-        onpointerdown={grab} onpointermove={pull} onpointerup={() => (dragging = false)}>
+        onpointerdown={(e) => drag(e, puck, (to) => (puck = to))}>
         <span>{puckScheme}</span>
     </Glass>
 
@@ -258,6 +261,10 @@
                                 style={t.rgba ? `--c: ${cssColor(t.rgba)}` : undefined} onclick={() => (tint = i)}></button>
                         {/each}
                     </div>
+                </div>
+                <div class="toggle-row">
+                    <span>Drag the cards to move them</span>
+                    <button class="btn" disabled={!moved} onclick={() => (offsets = home())}>Reset</button>
                 </div>
                 <div class="toggle-row">
                     <span>Show the card</span>
