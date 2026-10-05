@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src=".github/assets/reel.gif" width="880" alt="GlassRender: a lens passing over the wordmark, light travelling round a capsule, a clock cut from glass, playback controls over poppies, a sliding tab selector, a button opening into a menu, tinted buttons popping in, small glass turning light and dark over scrolling content, and glass flowing together">
+<img src=".github/assets/reel.avif" width="880" alt="GlassRender: a lens passes over the wordmark and turns into a capsule as the room goes dark, the capsule condenses into a clock cut from glass over monstera leaves, playback controls over poppies flow together into a tab bar with a sliding selector, the bar gathers into a button that opens into a menu, the button splits into four tinted buttons, a press brings up a sheet whose two small buttons, seen up close, turn light and dark as the page scrolls and then run together into one drop, which rises to the middle as a growing lens, lands on the grid, draws out a pill and gathers back into the first lens">
 
 <br>
 
@@ -339,3 +339,5 @@ GlassRender runs wherever WebGL2 does. Mask outlines need `EXT_color_buffer_floa
 ## License
 
 [MIT](LICENSE) © 2026 Feralthedogg
+
+The photographs in the reel are from Pexels, under the [Pexels License](https://www.pexels.com/license/): [monstera leaves](https://www.pexels.com/photo/dark-green-leaves-of-monstera-20432992/) by Balázs Gábor and [California poppies](https://www.pexels.com/photo/close-up-of-orange-poppies-under-blue-sky-18591317/) by Soly Moses.
