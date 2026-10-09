@@ -9,13 +9,13 @@
 Blur, refraction, rim light, shadow and color fringes over any image, canvas or video,<br>
 with React, Svelte and Vue components that keep the glass under your layout.
 
-[![version](https://img.shields.io/badge/version-0.1.1_Beta-8a5cff?style=flat-square)](package.json)
+[![version](https://img.shields.io/badge/version-0.1.1_Beta-8a5cff?style=flat-square)](https://www.npmjs.com/package/glassrender/v/0.1.1-beta)
 [![WebGL2](https://img.shields.io/badge/WebGL2-renderer-3d8bff?style=flat-square)](#browser-support)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?style=flat-square)](src)
 [![runtime dependencies](https://img.shields.io/badge/runtime_dependencies-0-2ea44f?style=flat-square)](package.json)
 [![license](https://img.shields.io/badge/license-MIT-ff6f91?style=flat-square)](LICENSE)
 
-[Quick start](#quick-start) · [Materials](#materials) · [Frameworks](#frameworks) · [Demos](#demos) · [API guide](api.md)
+[Install](#install) · [Quick start](#quick-start) · [Materials](#materials) · [Frameworks](#frameworks) · [Demos](#demos) · [API guide](api.md)
 
 </div>
 
@@ -71,19 +71,34 @@ Older material recipes, raw `material` overrides and the synthetic `prominent` p
 </tr>
 </table>
 
-## Quick start
+## Install
 
-GlassRender is built from this repository. You need Node.js 22.12 or later and npm:
+GlassRender and its framework adapters are available on npm. The current release is **0.1.1 Beta** (`0.1.1-beta`), published under the `beta` tag.
 
 ```sh
-git clone https://github.com/Feralthedogg/GlassRender
-cd GlassRender
-npm ci
-npm run build    # builds the core into dist/
-npm run demo     # serves the examples at http://127.0.0.1:5173/examples/
+npm install glassrender@beta
 ```
 
-Then draw glass on a canvas of your own:
+For a framework app, install the core together with the adapter you use:
+
+| Framework | Install command |
+| --- | --- |
+| React | `npm install glassrender@beta glassrender-react@beta` |
+| Svelte | `npm install glassrender@beta glassrender-svelte@beta` |
+| Vue | `npm install glassrender@beta glassrender-vue@beta` |
+
+The framework itself must already be installed in your app. To pin this release, replace `@beta` with `@0.1.1-beta` on both packages.
+
+| Package | npm |
+| --- | --- |
+| Core | [glassrender](https://www.npmjs.com/package/glassrender) |
+| React adapter | [glassrender-react](https://www.npmjs.com/package/glassrender-react) |
+| Svelte adapter | [glassrender-svelte](https://www.npmjs.com/package/glassrender-svelte) |
+| Vue adapter | [glassrender-vue](https://www.npmjs.com/package/glassrender-vue) |
+
+## Quick start
+
+After installing the package, draw glass on a canvas in your app. These imports work with your app's bundler:
 
 ```js
 import { createGlass } from "glassrender/core";
@@ -102,7 +117,7 @@ panel.set({ preset: "clear" });
 Coordinates are CSS pixels from the top-left corner of the canvas. The backdrop is yours to supply: GlassRender does not capture the page behind the canvas.
 
 <details>
-<summary><b>The complete page</b>, <code>examples/quick-start.html</code></summary>
+<summary><b>The repository browser example</b>, <code>examples/quick-start.html</code></summary>
 <br>
 
 ```html
@@ -169,7 +184,7 @@ Coordinates are CSS pixels from the top-left corner of the canvas. The backdrop 
 </html>
 ```
 
-Serve it over HTTP: run `npm run demo` and open http://127.0.0.1:5173/examples/quick-start.html.
+This standalone repository example imports the locally built `dist/` module. Follow [Run the repository demos](#run-the-repository-demos), then open http://127.0.0.1:5173/examples/quick-start.html.
 
 </details>
 
@@ -179,25 +194,23 @@ The **[API guide](api.md)** covers options and defaults, all 28 presets, groups,
 
 | Package | Version | Requires |
 | --- | --- | --- |
-| [`glassrender-react`](demo/react) | 0.1.1 Beta | React 18 or later |
-| [`glassrender-svelte`](demo/svelte) | 0.1.1 Beta | Svelte 5 |
-| [`glassrender-vue`](demo/vue) | 0.1.1 Beta | Vue 3.4 or later |
+| [`glassrender-react`](https://www.npmjs.com/package/glassrender-react) | 0.1.1 Beta | React 18 or later |
+| [`glassrender-svelte`](https://www.npmjs.com/package/glassrender-svelte) | 0.1.1 Beta | Svelte 5 |
+| [`glassrender-vue`](https://www.npmjs.com/package/glassrender-vue) | 0.1.1 Beta | Vue 3.4 or later |
 
 The three adapters share one model. `GlassCanvas` owns the canvas and the render loop, each `Glass` inside it draws glass under its own box, and `GlassGroup` merges the boxes inside it into one piece of glass. With `fixed={false}` (`:fixed="false"` in Vue), the canvas stays inside a container of your own size.
 
-Build the core first (see [Quick start](#quick-start)), then run the commands of your framework from the repository root.
+Install the core and your adapter in an existing framework app, then use the examples below. For the full local showcase, see [Run the repository demos](#run-the-repository-demos).
 
 <details open>
 <summary><b>React</b></summary>
 <br>
 
 ```sh
-npm --prefix demo/react ci
-npm --prefix demo/react run build
-npm --prefix demo/react run demo -- --host 127.0.0.1 --strictPort
+npm install glassrender@beta glassrender-react@beta
 ```
 
-Open http://127.0.0.1:5175/quick-start.html, or http://127.0.0.1:5175/ for the full demo. `demo/react/demo/quick-start.html` provides `#app` and loads `demo/react/demo/quick-start.tsx`:
+Use this entry point in a React app whose HTML provides an element with `id="app"`:
 
 ```tsx
 import { StrictMode, useState } from "react";
@@ -247,12 +260,10 @@ createRoot(container).render(<StrictMode><App /></StrictMode>);
 <br>
 
 ```sh
-npm --prefix demo/svelte ci
-npm --prefix demo/svelte run package
-npm --prefix demo/svelte run demo -- --host 127.0.0.1 --strictPort
+npm install glassrender@beta glassrender-svelte@beta
 ```
 
-Open http://127.0.0.1:5174/quick-start.html, or http://127.0.0.1:5174/ for the full demo. `demo/svelte/demo/quick-start.html` provides `#app`, and its entry point mounts `demo/svelte/demo/QuickStart.svelte`:
+In a Svelte 5 app, put the component below in `QuickStart.svelte` and mount it from an entry point. The app HTML provides an element with `id="app"`:
 
 ```ts
 import { mount } from "svelte";
@@ -304,12 +315,10 @@ mount(QuickStart, { target });
 <br>
 
 ```sh
-npm --prefix demo/vue ci
-npm --prefix demo/vue run build
-npm --prefix demo/vue run demo -- --host 127.0.0.1 --strictPort
+npm install glassrender@beta glassrender-vue@beta
 ```
 
-Open http://127.0.0.1:5176/quick-start.html, or http://127.0.0.1:5176/ for the full demo. `demo/vue/demo/quick-start.html` provides `#app`, and its entry point mounts `demo/vue/demo/QuickStart.vue`:
+In a Vue app, put the component below in `QuickStart.vue` and mount it from an entry point. The app HTML provides an element with `id="app"`:
 
 ```ts
 import { createApp } from "vue";
@@ -370,31 +379,35 @@ const backdrop = "data:image/svg+xml," + encodeURIComponent(
 
 The showcase reel uses built-in presets and ordinary RGBA tints; run it from the source above to reproduce the banner. The playground offers the built-in material catalog, shape kinds and environment settings. Its optical values come from the selected preset. The component demos show the same page in each framework, with draggable cards and a `control` lens. Move the lens across sharp backdrop edges to see its built-in color separation. The `standard` and `clear` profiles do not add color separation. Start them with the commands above. Each framework also has `quick-start.html`; `npm run build:demo` includes both pages in `demo-dist/`. The quick starts switch between built-in `standard` and `clear` profiles using a real button inside a `control` surface.
 
-## Install into an existing app
+### Run the repository demos
 
-Create the core archive and the archive of your adapter in this checkout. Each adapter command installs the adapter's dependencies and builds it before packing:
-
-```sh
-npm pack                            # glassrender-0.1.1-beta.tgz
-(cd demo/react && npm ci && npm pack)    # demo/react/glassrender-react-0.1.1-beta.tgz
-(cd demo/svelte && npm ci && npm pack)   # demo/svelte/glassrender-svelte-0.1.1-beta.tgz
-(cd demo/vue && npm ci && npm pack)      # demo/vue/glassrender-vue-0.1.1-beta.tgz
-```
-
-Then install the core together with your adapter, from an app next to the `GlassRender` directory:
+Clone the repository to run the showcase and playground. The demo toolchain needs Node.js 22.12 or later and npm:
 
 ```sh
-# React
-npm install ../GlassRender/glassrender-0.1.1-beta.tgz ../GlassRender/demo/react/glassrender-react-0.1.1-beta.tgz
-
-# Svelte
-npm install ../GlassRender/glassrender-0.1.1-beta.tgz ../GlassRender/demo/svelte/glassrender-svelte-0.1.1-beta.tgz
-
-# Vue
-npm install ../GlassRender/glassrender-0.1.1-beta.tgz ../GlassRender/demo/vue/glassrender-vue-0.1.1-beta.tgz
+git clone https://github.com/Feralthedogg/GlassRender.git
+cd GlassRender
+npm ci
+npm run build
+npm run demo
 ```
 
-The framework itself must already be installed in the app. Keep your entry point and import `GlassCanvas` and `Glass` as in the examples above.
+The core examples are served at http://127.0.0.1:5173/examples/. Run a framework demo from a separate terminal in the repository root:
+
+```sh
+# React: http://127.0.0.1:5175/
+npm --prefix demo/react ci
+npm --prefix demo/react run demo -- --host 127.0.0.1 --strictPort
+
+# Svelte: http://127.0.0.1:5174/
+npm --prefix demo/svelte ci
+npm --prefix demo/svelte run demo -- --host 127.0.0.1 --strictPort
+
+# Vue: http://127.0.0.1:5176/
+npm --prefix demo/vue ci
+npm --prefix demo/vue run demo -- --host 127.0.0.1 --strictPort
+```
+
+Each framework server also provides `/quick-start.html`. These repository commands run local demo sources; the npm commands in [Install](#install) are for adding GlassRender to your own app.
 
 ## Project layout
 
