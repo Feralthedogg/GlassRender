@@ -1,17 +1,23 @@
-// Atlas: which shapes read which (depth batches, found with a sweep over the bounds), where every backdrop region
-// lies in the atlas pages, and the capture and blur passes that fill them.
+/**
+ * @file atlas.ts
+ * @brief Backdrop dependency batches, atlas placement and blur passes.
+ * @details A sweep over shape bounds determines which earlier shapes each batch must capture.
+ */
+
 import { MATERIAL_FLOATS } from "../layout.js";
-import { ADAPT_OFF, B, C, FLAG_READ, FLAG_READS, INST, MAXL, MAXP, R } from "./lanes.js";
+import { ADAPT_OFF, B, C, FLAG_READ, FLAG_READS, INST, MAXL, MAXP, R, RGBA8, RGBA16F } from "./lanes.js";
 import { Fields } from "./fields.js";
 
-/** Drawing order by depth and the blur pyramid atlas. */
+/** @brief Drawing order by depth and the blur pyramid atlas. */
 export abstract class Atlas extends Fields {
     // Depth of every shape (how many layers of lower glass it sits on), the draw sequence and atlas placement.
     protected layout(): void {
         const n = this.count, o = this.order, bd = this.bounds, fl = this.flags, keys = this.draws, rg = this.reg, dp = this.depth;
         const sq = this.seq, ds = this.dstart, cu = this.list, cs = this.cs;
         let top = 0, fit = true, live = 0;
-        for (let i = 0; i < n; i++) { const si = o[i] as number; fl[si] = 0; dp[si] = 0; }
+        // Retain the old dependency while the sweep rewrites flags. partial() reuses this scratch afterwards.
+        const priorReads = this.rebuild;
+        for (let i = 0; i < n; i++) { const si = o[i] as number; priorReads[si] = (fl[si] as number) & FLAG_READS; fl[si] = 0; dp[si] = 0; }
         // candidate pairs (shapes whose bounds overlap) by a sweep, listed with the later shape of each pair
         const np = this.flat ? 0 : this.sweep();
         const pr = this.pairs, cd = this.cand;
@@ -59,8 +65,12 @@ export abstract class Atlas extends Fields {
         this.depths = top + 1;
         const layered = top > 0;
         if (layered !== this.layered) { this.layered = layered; this.backdropDirty = true; }
+        const format = this.extended && this.halfFloat ? RGBA16F : RGBA8;
         for (let i = 0; i < live; i++) {
             const slot = sq[i] as number, rb = slot * R, cells = rg[rb + 13] as number;
+            // Moving, raising or removing lower glass can turn an upper capture into backdrop-only.
+            if (priorReads[slot] !== ((fl[slot] as number) & FLAG_READS)) rg[rb + 8] = 1;
+            if (rg[rb + 14] !== 0 && this.pageDim[(rg[rb] as number) * 4 + 3] !== format) { fit = false; break; }
             if ((rg[rb + 14] === 0 || (rg[rb + 5] as number) > (rg[rb + 3] as number) || (rg[rb + 6] as number) > (rg[rb + 4] as number)
                 || (rg[rb + 1] as number) % cells !== 0 || (rg[rb + 2] as number) % cells !== 0
                 || (rg[rb + 7] as number) > (this.pageDim[(rg[rb] as number) * 4 + 2] as number)) && !this.placeOne(slot)) { fit = false; break; }
@@ -163,7 +173,13 @@ export abstract class Atlas extends Fields {
             rg[rb + 14] = 0;
             if (keys[slot] === 0 || pw > max || ph > max) continue;
             let j = m++;
-            while (j > 0 && (rg[(ls[j - 1] as number) * R + 6] as number) < ph) { ls[j] = ls[j - 1] as number; j--; }
+            // Equal-height regions keep a placement independent of drawing order.
+            // Moving a shape above another must not change its sampling coordinates in a fresh scene.
+            while (j > 0) {
+                const prior = ls[j - 1] as number, priorHeight = rg[prior * R + 6] as number;
+                if (priorHeight > ph || (priorHeight === ph && prior < slot)) break;
+                ls[j] = prior; j--;
+            }
             ls[j] = slot;
             area += pw * ph; if (pw > wide) wide = pw;
         }
@@ -198,14 +214,14 @@ export abstract class Atlas extends Fields {
     // Texture and level framebuffers of an atlas page; kept when the size is unchanged.
     protected openPage(page: number, w: number, used: number, levels: number): void {
         const gl = this.gl, pd = this.pageDim, pb = page * 4, step = 1 << (levels - 1 > 9 ? levels - 1 : 9);
-        const h = Math.ceil((used > 1 ? used : 1) / step) * step;
-        if (this.pageTex[page] !== null && pd[pb] === w && pd[pb + 1] === h && pd[pb + 2] === levels) return;
+        const h = Math.ceil((used > 1 ? used : 1) / step) * step, format = this.extended && this.halfFloat ? RGBA16F : RGBA8;
+        if (this.pageTex[page] !== null && pd[pb] === w && pd[pb + 1] === h && pd[pb + 2] === levels && pd[pb + 3] === format) return;
         this.dropPage(page);
         const t = gl.createTexture() as WebGLTexture | null;
         if (t === null) return;
         gl.activeTexture(0x84c0);
         gl.bindTexture(0x0de1, t);
-        gl.texStorage2D(0x0de1, levels, this.halfFloat ? 0x881a : 0x8058, w, h);
+        gl.texStorage2D(0x0de1, levels, format, w, h);
         gl.texParameteri(0x0de1, 0x2801, 0x2703); gl.texParameteri(0x0de1, 0x2800, 0x2601);
         gl.texParameteri(0x0de1, 0x2802, 0x812f); gl.texParameteri(0x0de1, 0x2803, 0x812f);
         const f = this.pageFbo, fb = page * MAXL;
@@ -217,7 +233,7 @@ export abstract class Atlas extends Fields {
             f[fb + k] = fbo;
         }
         this.pageTex[page] = t;
-        pd[pb] = w; pd[pb + 1] = h; pd[pb + 2] = levels;
+        pd[pb] = w; pd[pb + 1] = h; pd[pb + 2] = levels; pd[pb + 3] = format;
     }
 
     protected dropPage(page: number): void {
@@ -226,7 +242,7 @@ export abstract class Atlas extends Fields {
         for (let k = 0; k < MAXL; k++) { const o = f[fb + k] as WebGLFramebuffer | null; if (o !== null) { gl.deleteFramebuffer(o); f[fb + k] = null; } }
         gl.deleteTexture(t);
         this.pageTex[page] = null;
-        this.pageDim[pb] = 0; this.pageDim[pb + 1] = 0; this.pageDim[pb + 2] = 0;
+        this.pageDim[pb] = 0; this.pageDim[pb + 1] = 0; this.pageDim[pb + 2] = 0; this.pageDim[pb + 3] = 0;
     }
 
     // Instance record of a slot region at index i: region rect (atlas base texels), capture origin px and texel size,
@@ -288,6 +304,9 @@ export abstract class Atlas extends Fields {
         gl.uniform3f(this.captureS, 2 / w, 2 / h, 1);
         gl.drawArraysInstanced(5, 0, 4, count);
         const top = lv[first] as number;
+        const floating = pd[pb + 3] === RGBA16F, firstProgram = floating ? this.first : this.first8;
+        const firstLocation = floating ? this.firstS : this.first8S, downProgram = floating ? this.down : this.down8;
+        const downLocation = floating ? this.downS : this.down8S;
         let live = count, sc = 1;
         for (let k = 1; k < top; k++) {
             while (live > 0 && (lv[first + live - 1] as number) <= k) live--;
@@ -298,11 +317,11 @@ export abstract class Atlas extends Fields {
             gl.viewport(0, 0, w, h);
             if (k === 1) {
                 // the first level reads the captured texels with the capture's edge rule
-                gl.useProgram(this.first);
-                gl.uniform3f(this.firstS, 2 / w, 2 / h, sc);
+                gl.useProgram(firstProgram);
+                gl.uniform3f(firstLocation, 2 / w, 2 / h, sc);
             } else {
-                if (k === 2) gl.useProgram(this.down);
-                gl.uniform3f(this.downS, 2 / w, 2 / h, sc);
+                if (k === 2) gl.useProgram(downProgram);
+                gl.uniform3f(downLocation, 2 / w, 2 / h, sc);
             }
             gl.drawArraysInstanced(5, 0, 4, live);
         }

@@ -1,7 +1,12 @@
+/**
+ * @file index.ts
+ * @brief Public rendering API and compatibility exports.
+ */
+
 export {
-    CORNER_CIRCULAR, CORNER_SMOOTH, ENV_BUTTON_SHAPES, ENV_INACTIVE, ENV_INCREASE_CONTRAST, ENV_REDUCE_MOTION, ENV_REDUCE_TRANSPARENCY,
+    CORNER_CIRCULAR, CORNER_SMOOTH, DEFAULT_CHROMATIC_ABERRATION, ENV_BUTTON_SHAPES, ENV_INACTIVE, ENV_INCREASE_CONTRAST, ENV_REDUCE_MOTION, ENV_REDUCE_TRANSPARENCY,
     ENV_TINTED, ROWS_BOTTOM_UP, ROWS_TOP_DOWN, SCHEME_DARK, SCHEME_LIGHT, STACKING_EXACT, STACKING_FLAT, type CornerKind, type RowOrder,
-    type Scheme, type Stacking
+    type BackdropPixels, type Scheme, type Stacking
 } from "./layout.js";
 export {
     ADAPTIVE_SIDE, adaptScheme, adapts, backdropRegion, blurRegion, estimateScale, explainMaterial, extentFactor, headroomShare, limitOf, luminanceLevel, packMaterial,
@@ -25,4 +30,5 @@ export type {
     MaterialOptions, MemberOptions, MemberUpdate, Preset, Radius, ShapeOptions, ShapeUpdate, ShownScheme, StackingMode, Transition
 } from "./glass/types.js";
 export { createRenderer, Renderer } from "./renderer/renderer.js";
+export { resolveDisplayHeadroom, type DisplayBrightness } from "./hdr.js";
 export type { Err, Ok, Result } from "./result.js";

@@ -1,3 +1,8 @@
+/**
+ * @file backdrop.ts
+ * @brief Backdrop sizing, fitting and upload lifecycle.
+ */
+
 import type { Renderer } from "../renderer/renderer.js";
 import type { Fit } from "./types.js";
 
@@ -8,14 +13,17 @@ function sizeOf(s: TexImageSource, out: Float64Array): void {
     out[SH] = "videoHeight" in s ? s.videoHeight : "naturalHeight" in s ? s.naturalHeight : "displayHeight" in s ? s.displayHeight : s.height;
 }
 
-/** @internal Backdrop source of one glass. */
+/**
+ * @brief Backdrop source of one glass.
+ * @internal
+ */
 export class Backdrop {
     private readonly onLoad: () => void;
     private readonly size: Float64Array;
     private source: TexImageSource | null;
     private fit: Fit;
     private scratch: HTMLCanvasElement | null;
-    /** Upload again on every frame. */
+    /** @brief Upload again on every frame. */
     live: boolean;
 
     /** @param onLoad Called when an image that was still loading is ready (upload and draw). */
@@ -28,7 +36,10 @@ export class Backdrop {
         this.live = live;
     }
 
-    /** Take a source. @returns True when it can be uploaded now (false while an image is still loading). */
+    /**
+     * @brief Take a source. @returns True when it can be uploaded now (false while an image is
+     * still loading).
+     */
     set(source: TexImageSource | null, fit: Fit, live: boolean): boolean {
         this.release();
         this.source = source;
@@ -38,7 +49,10 @@ export class Backdrop {
         return true;
     }
 
-    /** Lay the source on a W x H drawing buffer: as it is when it has that size, else drawn by the fit rule. */
+    /**
+     * @brief Lay the source on a W x H drawing buffer: as it is when it has that size, else drawn
+     * by the fit rule.
+     */
     upload(renderer: Renderer, W: number, H: number): void {
         const s = this.source;
         if (s === null || W === 0 || H === 0) return;
@@ -72,7 +86,7 @@ export class Backdrop {
         renderer.setBackdropSource(c);
     }
 
-    /** Stop waiting for the source to load. */
+    /** @brief Stop waiting for the source to load. */
     release(): void {
         if (this.source !== null && "complete" in this.source) this.source.removeEventListener("load", this.onLoad);
     }

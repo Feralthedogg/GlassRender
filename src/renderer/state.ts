@@ -1,10 +1,13 @@
-// Shared state and typed storage for the renderer subsystems.
-import { BLOCK_FLOATS, MAX_MEMBERS } from "../layout.js";
-import { type MaterialSpec } from "../material.js";
+/**
+ * @file state.ts
+ * @brief Renderer storage, slot ownership and invalidation state.
+ */
+
+import { BLOCK_FLOATS, DEFAULT_CHROMATIC_ABERRATION, MAX_MEMBERS } from "../layout.js";
 import { A, B, C, F, G, GEN_SHIFT, GEOM_FIELD, GROW, INST, MAXL, MAXP, MB, MMF, R, SLOT_MASK } from "./lanes.js";
 import { type Shared } from "./shared.js";
 
-/** State of a renderer and its slot bookkeeping. */
+/** @brief State of a renderer and its slot bookkeeping. */
 export abstract class State {
     protected readonly gl: WebGL2RenderingContext;
     protected vao: WebGLVertexArrayObject;
@@ -24,6 +27,10 @@ export abstract class State {
     protected captureS: WebGLUniformLocation;
     protected first: WebGLProgram;
     protected firstS: WebGLUniformLocation;
+    protected first8: WebGLProgram;
+    protected first8S: WebGLUniformLocation;
+    protected down8: WebGLProgram;
+    protected down8S: WebGLUniformLocation;
     protected down: WebGLProgram;
     protected downS: WebGLUniformLocation;
     protected luma: WebGLProgram;
@@ -32,7 +39,15 @@ export abstract class State {
     protected lumaFbo: WebGLFramebuffer;
     protected halfFloat: boolean;
     protected readonly frame: Float32Array;
+    protected contextScale = 1;
+    protected surfaceScale = 1;
+    protected surfaceStateFactor = 1;
     protected readonly programs: Map<number, WebGLProgram>;
+    protected readonly rimPrograms = new Map<number, { program: WebGLProgram; mode: WebGLUniformLocation | null; projection: WebGLUniformLocation | null }>();
+    protected rimVao: WebGLVertexArrayObject | null = null;
+    protected rimVertexBuffer: WebGLBuffer | null = null;
+    protected rimIndexBuffer: WebGLBuffer | null = null;
+    protected readonly rimVertices = new Float32Array(96);
     protected readonly maxTex: number;
     protected readonly strideBytes: number;
     protected readonly stride: number;
@@ -50,9 +65,6 @@ export abstract class State {
     protected readonly msources: (TexImageSource | null)[];
     protected readonly kit: (WebGLProgram | null)[];
     protected readonly kitLoc: (WebGLUniformLocation | null)[];
-    protected readonly trial: Float32Array;
-    protected readonly trialInfo: Float32Array;
-    protected readonly specs: (MaterialSpec | null)[];
     protected blocks: Float32Array;
     protected ublocks: Float32Array;
     protected geo: Float32Array;
@@ -60,6 +72,8 @@ export abstract class State {
     protected bounds: Float32Array;
     protected ad: Float32Array;
     protected tints: Float32Array;
+    protected chromatic: Float64Array;
+    protected chromaticDefault = DEFAULT_CHROMATIC_ABERRATION;
     protected members: Float32Array;
     protected inst: Float32Array;
     protected lumaData: Float32Array;
@@ -84,8 +98,7 @@ export abstract class State {
     protected pairs: Int32Array;
     protected cand: Int32Array;
     protected bx: Float32Array;
-    // Partial-frame state: output changed since the last frame, pyramid to rebuild now, last-drawn bounds, and changed
-    // pixel rectangles for this frame.
+    // Partial redraw state: changed output, dependent pyramids, previous bounds and dirty rectangles.
     protected changed: Int8Array;
     protected rebuild: Int8Array;
     protected shown: Float32Array;
@@ -104,8 +117,8 @@ export abstract class State {
     protected draws: Int8Array;
     protected fixedTone: Int8Array;
     protected presets: Int8Array;
-    protected packed: Float32Array;
     protected backdropSource: TexImageSource | null;
+    protected backdropPixels: import("../layout.js").BackdropPixels | null;
     protected count: number;
     protected xn: number;
     protected stamp: number;
@@ -129,8 +142,10 @@ export abstract class State {
     protected source: WebGLTexture | null;
     protected sceneTex: WebGLTexture | null;
     protected copyTex: WebGLTexture | null;
+    protected destinationTex: WebGLTexture | null = null;
     protected sceneFbo: WebGLFramebuffer | null;
     protected copyFbo: WebGLFramebuffer | null;
+    protected destinationFbo: WebGLFramebuffer | null = null;
     protected bothFbo: WebGLFramebuffer | null;
     protected sceneW: number;
     protected sceneH: number;
@@ -158,10 +173,12 @@ export abstract class State {
         this.unionUbo = sh.unionUbo; this.instBuf = sh.instBuf; this.lumaBuf = sh.lumaBuf; this.pbo = sh.pbo; this.backdrop = sh.backdrop;
         this.present = sh.present; this.split = sh.split; this.splitT = sh.splitT; this.capture = sh.capture; this.captureS = sh.captureS;
         this.first = sh.first; this.firstS = sh.firstS;
+        this.first8 = sh.first8; this.first8S = sh.first8S; this.down8 = sh.down8; this.down8S = sh.down8S;
         this.down = sh.down; this.downS = sh.downS; this.luma = sh.luma; this.lumaW = sh.lumaW;
         this.lumaTex = sh.lumaTex; this.lumaFbo = sh.lumaFbo;
         this.halfFloat = sh.halfFloat;
-        this.frame = new Float32Array(12);
+        this.frame = new Float32Array(16);
+        this.frame[12] = 1; this.frame[13] = 1; this.frame[14] = 1;
         this.frame[2] = 1; this.frame[10] = 1;
         this.programs = new Map<number, WebGLProgram>();
         this.maxTex = maxTex;
@@ -179,11 +196,8 @@ export abstract class State {
         this.mfields = new Array<WebGLTexture | null>(16 * MMF).fill(null);
         this.mmasks = new Array<WebGLTexture | null>(16 * MMF).fill(null);
         this.msources = new Array<TexImageSource | null>(16 * MMF).fill(null);
-        this.kit = new Array<WebGLProgram | null>(4).fill(null);
-        this.kitLoc = new Array<WebGLUniformLocation | null>(6).fill(null);
-        this.trial = new Float32Array(BLOCK_FLOATS);
-        this.trialInfo = new Float32Array(6);
-        this.specs = new Array<MaterialSpec | null>(16).fill(null);
+        this.kit = new Array<WebGLProgram | null>(6).fill(null);
+        this.kitLoc = new Array<WebGLUniformLocation | null>(9).fill(null);
         this.blocks = new Float32Array(this.stride * 16);
         this.ublocks = new Float32Array(this.ustride * 16);
         this.geo = new Float32Array(G * 16);
@@ -191,6 +205,7 @@ export abstract class State {
         this.bounds = new Float32Array(B * 16);
         this.ad = new Float32Array(A * 16);
         this.tints = new Float32Array(4 * 16);
+        this.chromatic = new Float64Array(16);
         this.members = new Float32Array(MB * MAX_MEMBERS * 16);
         this.inst = new Float32Array(INST * 16);
         this.lumaData = new Float32Array(4 * 16);
@@ -232,8 +247,8 @@ export abstract class State {
         this.draws = new Int8Array(16);
         this.fixedTone = new Int8Array(16);
         this.presets = new Int8Array(16);
-        this.packed = new Float32Array(16);
         this.backdropSource = null;
+        this.backdropPixels = null;
         this.count = 0;
         this.xn = 0;
         this.stamp = 0;
@@ -287,6 +302,7 @@ export abstract class State {
         this.unionUbo = sh.unionUbo; this.instBuf = sh.instBuf; this.lumaBuf = sh.lumaBuf; this.pbo = sh.pbo; this.backdrop = sh.backdrop;
         this.present = sh.present; this.split = sh.split; this.splitT = sh.splitT; this.capture = sh.capture; this.captureS = sh.captureS;
         this.first = sh.first; this.firstS = sh.firstS;
+        this.first8 = sh.first8; this.first8S = sh.first8S; this.down8 = sh.down8; this.down8S = sh.down8S;
         this.down = sh.down; this.downS = sh.downS; this.luma = sh.luma; this.lumaW = sh.lumaW;
         this.lumaTex = sh.lumaTex; this.lumaFbo = sh.lumaFbo;
         this.halfFloat = sh.halfFloat;
@@ -342,6 +358,7 @@ export abstract class State {
         const bounds = new Float32Array(c * B); bounds.set(this.bounds); this.bounds = bounds;
         const ad = new Float32Array(c * A); ad.set(this.ad); this.ad = ad;
         const tints = new Float32Array(c * 4); tints.set(this.tints); this.tints = tints;
+        const chromatic = new Float64Array(c); chromatic.set(this.chromatic); this.chromatic = chromatic;
         const members = new Float32Array(c * MAX_MEMBERS * MB); members.set(this.members); this.members = members;
         this.inst = new Float32Array(c * INST);
         const reg = new Int32Array(c * R); reg.set(this.reg); this.reg = reg;
@@ -371,9 +388,8 @@ export abstract class State {
         const draws = new Int8Array(c); draws.set(this.draws); this.draws = draws;
         const fixedTone = new Int8Array(c); fixedTone.set(this.fixedTone); this.fixedTone = fixedTone;
         const presets = new Int8Array(c); presets.set(this.presets); this.presets = presets;
-        const packed = new Float32Array(c); packed.set(this.packed); this.packed = packed;
         for (let i = c0; i < c; i++) {
-            this.progs.push(null); this.fields.push(null); this.masks.push(null); this.specs.push(null); this.sources.push(null);
+            this.progs.push(null); this.fields.push(null); this.masks.push(null); this.sources.push(null);
             for (let k = 0; k < MMF; k++) { this.mfields.push(null); this.mmasks.push(null); this.msources.push(null); }
         }
         this.capacity = c;

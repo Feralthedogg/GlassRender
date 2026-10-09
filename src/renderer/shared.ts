@@ -1,13 +1,21 @@
+/**
+ * @file shared.ts
+ * @brief Shared GPU resources, program linking and resource creation errors.
+ */
+
 import {
-    BUILD_VERTEX, CAPTURE_FRAGMENT, DOWNSAMPLE_FRAGMENT, FIRST_MIP_FRAGMENT, FULL_VERTEX, LUMA_FRAGMENT, LUMA_VERTEX, PRESENT_FRAGMENT,
+    BUILD_VERTEX, CAPTURE_FRAGMENT, DOWNSAMPLE_FRAGMENT, DOWNSAMPLE_FRAGMENT_8, FIRST_MIP_FRAGMENT, FIRST_MIP_FRAGMENT_8, FULL_VERTEX, LUMA_FRAGMENT, LUMA_VERTEX, PRESENT_FRAGMENT,
     SPLIT_FRAGMENT
 } from "../kernels.js";
 import { RGBA8 } from "./lanes.js";
 
-/** Info log of the last program that failed to link. */
+/** @brief Info log of the last program that failed to link. */
 export const LAST_ERROR: string[] = [""];
 
-/** Pass programs, their uniform locations and the buffers, vertex arrays and textures shared by all shapes. */
+/**
+ * @brief Pass programs, their uniform locations and the buffers, vertex arrays and textures shared
+ * by all shapes.
+ */
 export interface Shared {
     readonly vao: WebGLVertexArrayObject;
     readonly buildVao: WebGLVertexArrayObject;
@@ -26,18 +34,25 @@ export interface Shared {
     readonly captureS: WebGLUniformLocation;
     readonly first: WebGLProgram;
     readonly firstS: WebGLUniformLocation;
+    readonly first8: WebGLProgram;
+    readonly first8S: WebGLUniformLocation;
+    readonly down8: WebGLProgram;
+    readonly down8S: WebGLUniformLocation;
     readonly down: WebGLProgram;
     readonly downS: WebGLUniformLocation;
     readonly luma: WebGLProgram;
     readonly lumaW: WebGLUniformLocation;
     readonly lumaTex: WebGLTexture;
     readonly lumaFbo: WebGLFramebuffer;
-    /** Float render targets can be used (blur pyramids in half floats, mask fields, extended-range output). */
+    /**
+     * @brief Float render targets can be used (blur pyramids in half floats, mask fields,
+     * extended-range output).
+     */
     readonly halfFloat: boolean;
 }
 
 /**
- * Compile the pass programs and create the shared objects of a context.
+ * @brief Compile the pass programs and create the shared objects of a context.
  * @param lumaCap Width of the luminance reading target in pixels.
  * @returns The objects, or why they cannot be made.
  */
@@ -46,13 +61,15 @@ export function openShared(gl: WebGL2RenderingContext, lumaCap: number): Shared 
     const present = link(gl, FULL_VERTEX, PRESENT_FRAGMENT), split = link(gl, FULL_VERTEX, SPLIT_FRAGMENT);
     const capture = link(gl, BUILD_VERTEX, CAPTURE_FRAGMENT), down = link(gl, BUILD_VERTEX, DOWNSAMPLE_FRAGMENT);
     const first = link(gl, BUILD_VERTEX, FIRST_MIP_FRAGMENT), luma = link(gl, LUMA_VERTEX, LUMA_FRAGMENT);
-    if (present === null || split === null || capture === null || down === null || first === null || luma === null) {
+    const first8 = link(gl, BUILD_VERTEX, FIRST_MIP_FRAGMENT_8), down8 = link(gl, BUILD_VERTEX, DOWNSAMPLE_FRAGMENT_8);
+    if (present === null || split === null || capture === null || down === null || first === null || luma === null || first8 === null || down8 === null) {
         return "pass program failed to compile: " + (LAST_ERROR[0] as string);
     }
     const splitT = gl.getUniformLocation(split, "uT"), captureS = gl.getUniformLocation(capture, "uS");
     const downS = gl.getUniformLocation(down, "uS"), lumaW = gl.getUniformLocation(luma, "uW");
     const firstS = gl.getUniformLocation(first, "uS");
-    if (splitT === null || captureS === null || downS === null || lumaW === null || firstS === null) return "pass uniforms missing";
+    const first8S = gl.getUniformLocation(first8, "uS"), down8S = gl.getUniformLocation(down8, "uS");
+    if (splitT === null || captureS === null || downS === null || lumaW === null || firstS === null || first8S === null || down8S === null) return "pass uniforms missing";
     const vao = gl.createVertexArray() as WebGLVertexArrayObject | null, buildVao = gl.createVertexArray() as WebGLVertexArrayObject | null;
     const lumaVao = gl.createVertexArray() as WebGLVertexArrayObject | null;
     const ubo = gl.createBuffer() as WebGLBuffer | null, frameUbo = gl.createBuffer() as WebGLBuffer | null;
@@ -96,7 +113,7 @@ export function openShared(gl: WebGL2RenderingContext, lumaCap: number): Shared 
     gl.texImage2D(0x0de1, 0, RGBA8, 1, 1, 0, 0x1908, 0x1401, null);
     return {
         vao, buildVao, lumaVao, ubo, frameUbo, unionUbo, instBuf, lumaBuf, pbo, backdrop, present, split, splitT, capture, captureS, first,
-        firstS, down, downS, luma, lumaW, lumaTex, lumaFbo, halfFloat
+        firstS, first8, first8S, down8, down8S, down, downS, luma, lumaW, lumaTex, lumaFbo, halfFloat
     };
 }
 

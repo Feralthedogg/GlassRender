@@ -1,11 +1,19 @@
+/**
+ * @file group.ts
+ * @brief Shared glass materials and independently positioned group outlines.
+ */
+
 import type { Renderer } from "../renderer/renderer.js";
 import type { Glass } from "./glass.js";
 import { GlassItem, paintElement } from "./item.js";
 import { kindOf, roundOf, type GroupOptions, type GroupUpdate, type MemberOptions, type MemberUpdate, type Radius } from "./types.js";
 
-/** A member of a group: an outline merged into the group's glass. Made by `GlassGroup.add`. */
+/**
+ * @brief A member of a group: an outline merged into the group's glass.
+ * @details Made by `GlassGroup.add`.
+ */
 export class GroupMember {
-    /** The group this belongs to. */
+    /** @brief The group this belongs to. */
     readonly group: GlassGroup;
     /** @internal */
     index: number;
@@ -19,14 +27,20 @@ export class GroupMember {
     height: number;
     /** @internal */
     radius: Radius | null;
-    /** @internal The outline comes from a mask. */
+    /**
+     * @brief The outline comes from a mask.
+     * @internal
+     */
     readonly masked: boolean;
     /** @internal */
     element: Element | null;
     /** @internal */
     everyFrame: boolean;
 
-    /** @internal Use `GlassGroup.add`. */
+    /**
+     * @brief Use `GlassGroup.add`.
+     * @internal
+     */
     constructor(group: GlassGroup, index: number, o: MemberOptions) {
         this.group = group;
         this.index = index;
@@ -40,12 +54,12 @@ export class GroupMember {
         this.everyFrame = false;
     }
 
-    /** False once removed from its group. */
+    /** @brief False once removed from its group. */
     get alive(): boolean {
         return this.index >= 0;
     }
 
-    /** Change the frame, the radius or the mask. */
+    /** @brief Change the frame, the radius or the mask. */
     set(u: MemberUpdate): this {
         if (this.index < 0) return this;
         if (u.x !== undefined) this.x = u.x;
@@ -58,13 +72,13 @@ export class GroupMember {
         return this;
     }
 
-    /** Move the member (CSS pixels). */
+    /** @brief Move the member (CSS pixels). */
     move(x: number, y: number): this {
         if (this.index >= 0 && (x !== this.x || y !== this.y)) { this.x = x; this.y = y; this.group.placeMember(this); }
         return this;
     }
 
-    /** Take the frame from an element's box (see `GlassShape.follow`). */
+    /** @brief Take the frame from an element's box (see `GlassShape.follow`). */
     follow(element: Element, everyFrame = false): this {
         if (this.index < 0) return this;
         this.unfollow();
@@ -75,7 +89,7 @@ export class GroupMember {
         return this;
     }
 
-    /** Stop following an element. */
+    /** @brief Stop following an element. */
     unfollow(): void {
         if (this.element !== null) {
             this.group.glass.unwatch(this);
@@ -84,7 +98,7 @@ export class GroupMember {
         }
     }
 
-    /** Take the member out of its group. */
+    /** @brief Take the member out of its group. */
     remove(): void {
         if (this.index >= 0) { this.unfollow(); this.group.dropMember(this); }
     }
@@ -102,12 +116,18 @@ export class GroupMember {
     }
 }
 
-/** Several outlines drawn as one piece of glass whose edges flow into each other. Made by `Glass.addGroup`. */
+/**
+ * @brief Several outlines drawn as one piece of glass whose edges flow into each other.
+ * @details Made by `Glass.addGroup`.
+ */
 export class GlassGroup extends GlassItem {
     private spacing: number;
     private readonly members: GroupMember[];
 
-    /** @internal Use `Glass.addGroup`. */
+    /**
+     * @brief Use `Glass.addGroup`.
+     * @internal
+     */
     constructor(glass: Glass, renderer: Renderer, o: GroupOptions) {
         super(glass, renderer, o);
         this.spacing = o.spacing ?? 0;
@@ -116,14 +136,15 @@ export class GlassGroup extends GlassItem {
         this.start();
     }
 
-    /** Number of members. */
+    /** @brief Number of members. */
     get size(): number {
         return this.members.length;
     }
 
     /**
-     * Add a member (at most 16 per group, at most 4 of them with a mask).
-     * @returns The member, or null when the group is full or removed or the mask cannot be used (see `error`).
+     * @brief Add a member (at most 16 per group, at most 4 of them with a mask).
+     * @returns The member, or null when the group is full or removed or the mask cannot be used
+     * (see `error`).
      */
     add(o: MemberOptions): GroupMember | null {
         if (this.removed) return null;
@@ -136,12 +157,11 @@ export class GlassGroup extends GlassItem {
             this.corners(m);
         }
         this.members.push(m);
-        this.reside();
         this.glass.update();
         return m;
     }
 
-    /** Change any options of the group. */
+    /** @brief Change any options of the group. */
     set(u: GroupUpdate): this {
         if (this.removed) return this;
         if (u.spacing !== undefined && u.spacing !== this.spacing) { this.spacing = u.spacing; this.renderer.setSpacing(this.id, u.spacing); }
@@ -155,7 +175,6 @@ export class GlassGroup extends GlassItem {
     placeMember(m: GroupMember): void {
         this.renderer.setMember(this.id, m.index, m.x, m.y, m.width, m.height, m.round());
         this.corners(m);
-        this.reside();
         this.glass.update();
     }
 
@@ -165,7 +184,10 @@ export class GlassGroup extends GlassItem {
         else this.error = "only a member made with a mask can get another mask";
     }
 
-    /** @internal The renderer moves its last member into the gap; the objects follow. */
+    /**
+     * @brief The renderer moves its last member into the gap; the objects follow.
+     * @internal
+     */
     dropMember(m: GroupMember): void {
         const ms = this.members, i = m.index, last = ms.length - 1;
         this.renderer.removeMember(this.id, i);
@@ -173,7 +195,6 @@ export class GlassGroup extends GlassItem {
         ms[i] = tail; tail.index = i;
         ms.pop();
         m.index = -1;
-        this.reside();
         this.glass.update();
     }
 
@@ -181,7 +202,10 @@ export class GlassGroup extends GlassItem {
         for (const m of this.members) m.unfollow();
     }
 
-    /** @internal The first followed element of the members in document order. */
+    /**
+     * @brief The first followed element of the members in document order.
+     * @internal
+     */
     override anchor(): Element | null {
         let a: Element | null = null;
         for (const m of this.members) {
@@ -189,15 +213,6 @@ export class GlassGroup extends GlassItem {
             if (e !== null && (a === null || (a.compareDocumentPosition(e) & 2) !== 0)) a = e;
         }
         return a;
-    }
-
-    protected shortSide(): number {
-        let side = 0, area = -1;
-        for (const m of this.members) {
-            const a = m.width * m.height;
-            if (a > area) { area = a; side = m.width < m.height ? m.width : m.height; }
-        }
-        return side;
     }
 
     protected paint(): void {
@@ -211,8 +226,4 @@ export class GlassGroup extends GlassItem {
         if (!m.masked && r !== null && typeof r !== "number") this.renderer.setMemberCorners(this.id, m.index, r[0], r[1], r[2], r[3]);
     }
 
-    // a described material follows the short side of the largest member
-    private reside(): void {
-        if (this.material !== null && this.shortSide() !== this.side) this.applyMaterial();
-    }
 }

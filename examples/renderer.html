@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>GlassRender native renderer demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0c0d12; overflow: hidden; font-family: system-ui, sans-serif; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+
+  #panel {
+    position: fixed; top: 16px; left: 16px; color: #eee; font-size: 13px;
+    background: #161822;
+    padding: 14px 18px; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 16px 36px rgba(0,0,0,0.5); z-index: 10; line-height: 1.6;
+    max-width: 320px; user-select: none;
+  }
+  #panel h1 { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; }
+  #panel .badge { font-size: 10px; background: rgba(120, 160, 255, 0.2); color: #8ab4f8; padding: 2px 7px; border-radius: 20px; font-weight: 600; }
+  #panel .control-row { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+  #panel label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #8a8d9a; font-weight: 600; }
+  #panel select {
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+    color: #fff; padding: 6px 10px; border-radius: 8px; font-size: 12px; outline: none; cursor: pointer;
+  }
+  #panel select option { background: #161822; color: #fff; }
+  #panel .keys { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 12px; color: #9aa0a6; }
+  #panel .keys kbd {
+    background: rgba(255,255,255,0.12); color: #fff; padding: 1px 6px; border-radius: 5px; font-family: inherit; font-weight: 600; font-size: 11px;
+  }
+
+  #error {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    color: #ff6b6b; background: rgba(20, 20, 25, 0.95); padding: 24px; border-radius: 14px;
+    font-size: 14px; display: none; z-index: 20; max-width: 85vw; border: 1px solid rgba(255,100,100,0.3);
+    white-space: pre-wrap; font-family: monospace;
+  }
+</style>
+</head>
+<body>
+<div id="panel">
+  <h1>GlassRender <span class="badge">Built-in materials</span></h1>
+  <div class="control-row">
+    <label for="presetSelect">Material for every shape</label>
+    <select id="presetSelect"></select>
+  </div>
+  <div class="keys">
+    • <b>Drag a shape</b> to move it<br>
+    • <b>Scroll over a shape</b> to resize it<br>
+    • <kbd>D</kbd> : Switch dark / light appearance
+  </div>
+</div>
+
+<div id="error"></div>
+<canvas id="c"></canvas>
+
+<script type="module">
+import {
+  createRenderer,
+  CORNER_SMOOTH,
+  CORNER_CIRCULAR,
+  SCHEME_DARK,
+  SCHEME_LIGHT,
+  PRESET_NOTIFICATION,
+  PRESET_CONTROL,
+  PRESET_CONTROL_PANEL,
+  PRESET_LOUPE,
+  PRESET_DOCK
+} from "../dist/advanced.js";
+import { MATERIALS, presetNumber } from "../dist/materials.js";
+
+const canvas = document.getElementById("c");
+const errorEl = document.getElementById("error");
+const presetSelect = document.getElementById("presetSelect");
+
+function showError(err) {
+  console.error(err);
+  errorEl.textContent = (err && err.stack) || String(err);
+  errorEl.style.display = "block";
+}
+
+window.addEventListener("error", (e) => showError(e.error || e.message));
+window.addEventListener("unhandledrejection", (e) => showError(e.reason));
+
+try {
+  // An empty choice restores each shape's selected profile; it is not another material.
+  const defaults = document.createElement("option");
+  defaults.value = "";
+  defaults.textContent = "Scene defaults";
+  presetSelect.appendChild(defaults);
+  for (const material of MATERIALS) {
+    const opt = document.createElement("option");
+    opt.value = material.name;
+    opt.textContent = material.name;
+    presetSelect.appendChild(opt);
+  }
+
+  const gl = canvas.getContext("webgl2", {
+    alpha: true,
+    antialias: false,
+    premultipliedAlpha: false
+  });
+  if (!gl) throw new Error("WebGL2 is not supported on this device/browser.");
+
+  const res = createRenderer(gl);
+  if (!res.ok) throw new Error("Renderer creation failed: " + res.error);
+  const renderer = res.value;
+  let frameId = 0;
+  function update() {
+    if (frameId === 0) frameId = requestAnimationFrame(loop);
+  }
+  function loop(time) {
+    frameId = 0;
+    if (renderer.render(time)) update();
+  }
+
+  // --- Rich Backdrop Canvas ---
+  const bgCanvas = document.createElement("canvas");
+  const bgCtx = bgCanvas.getContext("2d");
+
+  function drawBackdrop(w, h) {
+    bgCanvas.width = w;
+    bgCanvas.height = h;
+
+    // Layered mesh gradient
+    const grad1 = bgCtx.createLinearGradient(0, 0, w, h);
+    grad1.addColorStop(0, "#2b1055");
+    grad1.addColorStop(0.35, "#7597de");
+    grad1.addColorStop(0.7, "#ff758c");
+    grad1.addColorStop(1, "#ff7eb3");
+    bgCtx.fillStyle = grad1;
+    bgCtx.fillRect(0, 0, w, h);
+
+    // Glowing spheres
+    bgCtx.save();
+    for (let i = 0; i < 24; i++) {
+      const cx = (i * 197 + 100) % w;
+      const cy = (i * 283 + 70) % h;
+      const rad = 50 + (i * 29) % 140;
+      const g = bgCtx.createRadialGradient(cx, cy, 0, cx, cy, rad);
+      g.addColorStop(0, `hsla(${i * 25}, 95%, 65%, 0.6)`);
+      g.addColorStop(0.6, `hsla(${i * 25}, 90%, 55%, 0.2)`);
+      g.addColorStop(1, "transparent");
+      bgCtx.fillStyle = g;
+      bgCtx.beginPath();
+      bgCtx.arc(cx, cy, rad, 0, Math.PI * 2);
+      bgCtx.fill();
+    }
+
+    // Bold Typography for refraction testing
+    bgCtx.fillStyle = "rgba(255, 255, 255, 0.95)";
+    bgCtx.font = `900 ${Math.round(w * 0.08)}px system-ui, sans-serif`;
+    bgCtx.textAlign = "center";
+    bgCtx.textBaseline = "middle";
+    bgCtx.fillText("REFRACTION", w / 2, h * 0.38);
+
+    bgCtx.fillStyle = "rgba(0, 0, 0, 0.75)";
+    bgCtx.font = `700 ${Math.round(w * 0.026)}px system-ui, sans-serif`;
+    bgCtx.fillText("Glass Render", w / 2, h * 0.48);
+
+    // High frequency pattern for distortion visibility
+    const barY = h * 0.62;
+    const boxSize = 28;
+    for (let x = 0; x < w; x += boxSize) {
+      bgCtx.fillStyle = ((x / boxSize) % 2 === 0) ? "#0a0a0f" : "#f5f5f7";
+      bgCtx.fillRect(x, barY, boxSize, boxSize);
+    }
+    bgCtx.restore();
+  }
+
+  let darkScheme = true;
+  let currentScheme = darkScheme ? SCHEME_DARK : SCHEME_LIGHT;
+
+  // Initial glass shapes with different presets
+  const shapes = [
+    { name: "Notification", preset: PRESET_NOTIFICATION, x: 90, y: 80, w: 320, h: 220, r: 44, corner: CORNER_SMOOTH, handle: -1 },
+    { name: "Control lens", preset: PRESET_CONTROL, x: 450, y: 130, w: 220, h: 220, r: 110, corner: CORNER_CIRCULAR, handle: -1 },
+    { name: "Control center", preset: PRESET_CONTROL_PANEL, x: 180, y: 350, w: 380, h: 180, r: 32, corner: CORNER_SMOOTH, handle: -1 },
+    { name: "Loupe", preset: PRESET_LOUPE, x: 600, y: 370, w: 170, h: 170, r: 85, corner: CORNER_CIRCULAR, handle: -1 },
+    { name: "Dock", preset: PRESET_DOCK, x: 80, y: 570, w: 700, h: 90, r: 45, corner: CORNER_SMOOTH, handle: -1 }
+  ];
+  const originalPresets = new Map(shapes.map(shape => [shape, shape.preset]));
+
+  function syncShapes() {
+    for (const s of shapes) {
+      if (s.handle < 0) {
+        s.handle = renderer.addShape(s.x, s.y, s.w, s.h, s.r, s.corner, currentScheme);
+      } else {
+        renderer.setShape(s.handle, s.x, s.y, s.w, s.h, s.r);
+      }
+      renderer.setPreset(s.handle, s.preset, currentScheme);
+    }
+    update();
+  }
+
+  function handleResize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+
+    renderer.resize(canvas.width, canvas.height, dpr);
+    drawBackdrop(canvas.width, canvas.height);
+    renderer.setBackdropSource(bgCanvas);
+    update();
+  }
+
+  window.addEventListener("resize", handleResize);
+  handleResize();
+  syncShapes();
+
+  // Preset selector
+  presetSelect.value = "";
+  presetSelect.addEventListener("change", (e) => {
+    const selected = e.target.value;
+    for (const s of shapes) {
+      s.preset = selected === "" ? originalPresets.get(s) : presetNumber(selected);
+      if (s.handle >= 0) renderer.setPreset(s.handle, s.preset, currentScheme);
+    }
+    update();
+  });
+
+  // --- Interaction ---
+  let activeShape = null;
+  let dragOffset = { x: 0, y: 0 };
+
+  canvas.addEventListener("pointerdown", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+
+    for (let i = shapes.length - 1; i >= 0; i--) {
+      const s = shapes[i];
+      if (px >= s.x && px <= s.x + s.w && py >= s.y && py <= s.y + s.h) {
+        activeShape = s;
+        dragOffset.x = px - s.x;
+        dragOffset.y = py - s.y;
+        renderer.raise(s.handle);
+        update();
+        shapes.splice(i, 1);
+        shapes.push(s);
+        canvas.setPointerCapture(e.pointerId);
+        break;
+      }
+    }
+  });
+
+  canvas.addEventListener("pointermove", (e) => {
+    if (!activeShape) return;
+    const rect = canvas.getBoundingClientRect();
+    activeShape.x = (e.clientX - rect.left) - dragOffset.x;
+    activeShape.y = (e.clientY - rect.top) - dragOffset.y;
+    renderer.setShape(activeShape.handle, activeShape.x, activeShape.y, activeShape.w, activeShape.h, activeShape.r);
+    update();
+  });
+
+  const stopDrag = () => { activeShape = null; };
+  canvas.addEventListener("pointerup", stopDrag);
+  canvas.addEventListener("pointercancel", stopDrag);
+
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+
+    for (let i = shapes.length - 1; i >= 0; i--) {
+      const s = shapes[i];
+      if (px >= s.x && px <= s.x + s.w && py >= s.y && py <= s.y + s.h) {
+        const factor = e.deltaY < 0 ? 1.05 : 0.95;
+        const cx = s.x + s.w / 2;
+        const cy = s.y + s.h / 2;
+        s.w = Math.max(50, s.w * factor);
+        s.h = Math.max(50, s.h * factor);
+        s.x = cx - s.w / 2;
+        s.y = cy - s.h / 2;
+        s.r = Math.min(s.r, Math.min(s.w, s.h) / 2);
+        renderer.setShape(s.handle, s.x, s.y, s.w, s.h, s.r);
+        update();
+        break;
+      }
+    }
+  }, { passive: false });
+
+  window.addEventListener("keydown", (e) => {
+    if (e.target instanceof Element && e.target.closest("input, select, textarea, [contenteditable='true']")) return;
+    if (e.key === "d" || e.key === "D") {
+      darkScheme = !darkScheme;
+      currentScheme = darkScheme ? SCHEME_DARK : SCHEME_LIGHT;
+      for (const s of shapes) {
+        if (s.handle >= 0) renderer.setPreset(s.handle, s.preset, currentScheme);
+      }
+      update();
+    }
+  });
+
+  window.addEventListener("pagehide", () => {
+    cancelAnimationFrame(frameId);
+    renderer.dispose();
+  }, { once: true });
+
+} catch (err) {
+  showError(err);
+}
+</script>
+</body>
+</html>

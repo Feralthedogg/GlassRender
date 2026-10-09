@@ -1,8 +1,13 @@
-// Convenience layer over the renderer: a self-sizing canvas, a render loop that runs while something changes or moves,
-// named options for shapes and groups, and WebGL context management. Calls may allocate; frames do not, except for
-// elements followed on every frame.
+/**
+ * @file glass.ts
+ * @brief Canvas lifecycle and demand-driven rendering.
+ * @details Frames reuse storage except when measuring elements followed on every frame.
+ */
+
 import { STACKING_EXACT, STACKING_FLAT } from "../layout.js";
-import { headroomShare, type Rgb } from "../material.js";
+import type { BackdropPixels } from "../layout.js";
+import { displayHeadroom, resolveDisplayHeadroom, type DisplayBrightness } from "../hdr.js";
+import { headroomShare } from "../material.js";
 import { Renderer } from "../renderer/renderer.js";
 import { err, ok, type Result } from "../result.js";
 import { Backdrop } from "./backdrop.js";
@@ -18,13 +23,17 @@ import type {
 // How a browser lets a canvas show values above standard white (a proposed interface available in some browsers).
 type RangeCanvas = HTMLCanvasElement & { configureHighDynamicRange?: (options: { mode: string }) => void };
 
-const ACCENT: Rgb = [0, 0.478, 1];
-
-/** Glass on a canvas: shapes and groups, a backdrop, and a render loop that runs while something changes. */
+/**
+ * @brief Glass on a canvas: shapes and groups, a backdrop, and a render loop that runs while
+ * something changes.
+ */
 export class Glass {
-    /** The canvas the glass is drawn on. */
+    /** @brief The canvas the glass is drawn on. */
     readonly canvas: HTMLCanvasElement;
-    /** The renderer underneath, for low-level calls (`update()` afterwards schedules a frame). */
+    /**
+     * @brief The renderer underneath, for low-level calls (`update()` afterwards schedules a
+     * frame).
+     */
     readonly renderer: Renderer;
     private readonly items: GlassItem[];
     private readonly leaving: GlassItem[];
@@ -48,7 +57,6 @@ export class Glass {
     private extended: boolean;
     private rangeShown: boolean;
     private share: number;
-    private accent: Rgb;
     private pixelWidth: number;
     private pixelHeight: number;
     private ratio: number;
@@ -58,10 +66,13 @@ export class Glass {
     private reorder: boolean;
     private lost: boolean;
     private destroyed: boolean;
-    /** Why the glass could not be rebuilt after the context came back ("" otherwise). */
+    /** @brief Why the glass could not be rebuilt after the context came back ("" otherwise). */
     error: string;
 
-    /** @internal Use `createGlass`. */
+    /**
+     * @brief Use `createGlass`.
+     * @internal
+     */
     constructor(canvas: HTMLCanvasElement, renderer: Renderer, o: GlassOptions) {
         this.canvas = canvas;
         this.renderer = renderer;
@@ -83,11 +94,11 @@ export class Glass {
         this.env = o.environment ?? {};
         this.envBits = 0;
         this.range = o.extendedRange ?? false;
-        this.headroom = o.headroom !== undefined && o.headroom > 1 ? o.headroom : 2;
+        const headroom = o.displayHeadroom ?? o.headroom;
+        this.headroom = displayHeadroom(headroom);
         this.extended = false;
         this.rangeShown = false;
         this.share = 0;
-        this.accent = o.accent ?? ACCENT;
         this.pixelWidth = 0;
         this.pixelHeight = 0;
         this.ratio = 1;
@@ -103,6 +114,7 @@ export class Glass {
         this.applyEnvironment();
         if (o.stacking === "flat") renderer.setStacking(STACKING_FLAT);
         if (o.lightAngle !== undefined) renderer.setLightAngle(o.lightAngle);
+        if (o.chromaticAberration !== undefined) renderer.setDefaultChromaticAberration(o.chromaticAberration);
         if (o.autoResize ?? true) {
             if (typeof ResizeObserver === "function") {
                 this.canvasObserver = new ResizeObserver(() => { this.resize(); });
@@ -116,32 +128,39 @@ export class Glass {
         this.update();
     }
 
-    /** Width of the canvas in CSS pixels. */
+    /** @brief Width of the canvas in CSS pixels. */
     get width(): number {
         return this.pixelWidth / this.ratio;
     }
 
-    /** Height of the canvas in CSS pixels. */
+    /** @brief Height of the canvas in CSS pixels. */
     get height(): number {
         return this.pixelHeight / this.ratio;
     }
 
-    /** The surroundings in effect, as `ENV_*` bits ("auto" settings resolved). */
+    /** @brief The surroundings in effect, as `ENV_*` bits ("auto" settings resolved). */
     get environment(): number {
         return this.envBits;
     }
 
-    /** True while the glass is drawn in extended range. */
+    /** @brief True while the glass is drawn in extended range. */
     get extendedRange(): boolean {
         return this.extended;
     }
+    /** @brief Supplied display multiplier; 1 until a finite value of at least 1 is supplied. */
+    get displayHeadroom(): number { return this.headroom; }
 
-    /** True while the WebGL context is lost; drawing resumes on its own when it is back. */
+    /**
+     * @brief True while the WebGL context is lost; drawing resumes on its own when it is back.
+     */
     get contextLost(): boolean {
         return this.lost;
     }
 
-    /** Add a shape. Only the frame is required. */
+    /**
+     * @brief Add a shape.
+     * @details Only the frame is required.
+     */
     add(o: ShapeOptions): GlassShape {
         const s = new GlassShape(this, this.renderer, o);
         this.items.push(s);
@@ -149,7 +168,9 @@ export class Glass {
         return s;
     }
 
-    /** Add a group: outlines added to it share one piece of glass and merge within `spacing`. */
+    /**
+     * @brief Add a group: outlines added to it share one piece of glass and merge within `spacing`.
+     */
     addGroup(o: GroupOptions = {}): GlassGroup {
         const g = new GlassGroup(this, this.renderer, o);
         this.items.push(g);
@@ -158,15 +179,38 @@ export class Glass {
     }
 
     /**
-     * Set the picture behind the glass. It is laid on the canvas by `fit` and laid again when the canvas is resized.
+     * @brief Set the picture behind the glass.
+     * @details It is laid on the canvas by `fit` and laid again when the canvas is resized. null
+     * removes uploaded pixels and the retained source, including live and raw backdrops.
      * @param live Upload it again on every frame (a playing video, an animated canvas).
      */
     setBackdrop(source: TexImageSource | null, fit: Fit = "cover", live = false): void {
+        if (source === null) { this.clearBackdrop(); return; }
         if (this.backdrop.set(source, fit, live)) this.upload();
         this.update();
     }
 
-    /** Change the default surroundings of the shapes. */
+    /** @brief Remove the backdrop pixels and retained source, returning to the empty backdrop. */
+    clearBackdrop(): void {
+        this.backdrop.set(null, "stretch", false);
+        this.renderer.clearBackdrop();
+        this.update();
+    }
+
+    /**
+     * @brief Set target-sized encoded extended-sRGB premultiplied float/half pixels.
+     * @details RGB can exceed 1. Replaces a DOM/live backdrop after a successful upload, bypasses
+     * 2D canvas fitting, and retains a snapshot for context restoration. Resubmit after resizing.
+     */
+    setBackdropPixels(pixels: BackdropPixels): Result<number> {
+        const uploaded = this.renderer.setBackdropPixels(pixels);
+        if (!uploaded.ok) return uploaded;
+        this.backdrop.set(null, "stretch", false);
+        this.update();
+        return uploaded;
+    }
+
+    /** @brief Change the default surroundings of the shapes. */
     setAppearance(appearance: Appearance): void {
         if (appearance === this.appearance) return;
         this.appearance = appearance;
@@ -175,8 +219,9 @@ export class Glass {
     }
 
     /**
-     * Change the surroundings of the built-in materials: window activity, the tinted setting, reduced transparency,
-     * increased contrast, reduced motion. Fields left out keep their value; "auto" follows the device.
+     * @brief Change the surroundings of the built-in materials: window activity, the tinted
+     * setting, reduced transparency, increased contrast, reduced motion.
+     * @details Fields left out keep their value; "auto" follows the device.
      */
     setEnvironment(environment: EnvironmentOptions): void {
         this.env = { ...this.env, ...environment };
@@ -184,42 +229,67 @@ export class Glass {
     }
 
     /**
-     * Draw in extended range (values above the standard white on screens that show them) or go back to standard range.
-     * It can be turned on only when the glass was created with the `extendedRange` option (true or "auto"): the
-     * drawing buffer needs an alpha channel for it, which is decided when the context is made.
+     * @brief Draw in extended range (values above the standard white on screens that show them) or
+     * go back to standard range.
+     * @details It can be turned on only when the glass was created with the `extendedRange` option
+     * (true or "auto"): the drawing buffer needs an alpha channel for it, which is decided when the
+     * context is made.
      * @param on true, false, or "auto" to follow `dynamic-range: high`.
-     * @param headroom Brightest value of the screen relative to the standard white (kept when left out).
+     * @param headroom Brightest value of the screen relative to the standard white (kept when left
+     * out).
      * @returns True when the glass is drawn in extended range now.
      */
     setExtendedRange(on: Follow, headroom?: number): boolean {
         this.range = on;
-        if (headroom !== undefined && headroom > 1) this.headroom = headroom;
+        if (headroom !== undefined) this.headroom = displayHeadroom(headroom, this.headroom);
         this.applyRange();
         return this.extended;
     }
 
-    /** Change the accent colour of the "prominent" preset. */
-    setAccent(accent: Rgb): void {
-        this.accent = accent;
-        for (const it of this.items) if (it.accented()) it.retint();
-        this.update();
+    /**
+     * @brief Set display headroom from brightness state supplied by the host.
+     * @details Keeps the requested output range and independent surface/context scales. Invalid
+     * state leaves the previous headroom and rendered frame intact; no device state is queried.
+     * @returns The resolved display multiplier, or an input validation error.
+     */
+    setDisplayBrightness(state: DisplayBrightness): Result<number> {
+        const resolved = resolveDisplayHeadroom(state);
+        if (!resolved.ok) return resolved;
+        this.headroom = resolved.value;
+        this.applyRange();
+        return resolved;
     }
 
-    /** Turn every rim light by `radians` clockwise (for a light that follows a pointer or a device's tilt). */
+    /**
+     * @brief Turn every rim light by `radians` clockwise (for a light that follows a pointer or a
+     * device's tilt).
+     */
     setLightAngle(radians: number): void {
         this.renderer.setLightAngle(radians);
         this.update();
     }
 
-    /** Glass over glass: "exact" (default) or "flat". */
+    /** @brief Current default color-separation multiplier for shapes and groups. */
+    get chromaticAberration(): number {
+        return this.renderer.getDefaultChromaticAberration();
+    }
+
+    /** @brief Change color separation for items that inherit the canvas default. */
+    setChromaticAberration(strength: number): void {
+        this.renderer.setDefaultChromaticAberration(strength);
+        this.update();
+    }
+
+    /** @brief Glass over glass: "exact" (default) or "flat". */
     setStacking(mode: StackingMode): void {
         this.renderer.setStacking(mode === "flat" ? STACKING_FLAT : STACKING_EXACT);
         this.update();
     }
 
     /**
-     * Size the drawing buffer. Without arguments it takes the displayed size of the canvas and the pixel ratio of the
-     * screen (what `autoResize` does on its own).
+     * @brief Size the drawing buffer.
+     * @details Without arguments it takes the displayed size of the canvas and the pixel ratio of
+     * the screen (what `autoResize` does on its own).
      */
     resize(width?: number, height?: number, ratio?: number): void {
         if (this.destroyed) return;
@@ -229,21 +299,21 @@ export class Glass {
         if (w > 0 && h > 0) this.setSize(Math.round(w * r), Math.round(h * r), r);
     }
 
-    /** Draw now (otherwise frames are drawn on their own after every change). */
+    /** @brief Draw now (otherwise frames are drawn on their own after every change). */
     render(now?: number): void {
         if (this.destroyed || this.lost) return;
         if (this.frameId !== 0) { cancelAnimationFrame(this.frameId); this.frameId = 0; }
         this.tick(now ?? performance.now());
     }
 
-    /** Ask for a frame (after low-level calls on `renderer`). */
+    /** @brief Ask for a frame (after low-level calls on `renderer`). */
     update(): void {
         if (this.frameId === 0 && !this.destroyed && !this.lost && typeof requestAnimationFrame === "function") {
             this.frameId = requestAnimationFrame(this.onFrame);
         }
     }
 
-    /** Stop the loop, drop the listeners and release the GPU objects. */
+    /** @brief Stop the loop, drop the listeners and release the GPU objects. */
     destroy(): void {
         if (this.destroyed) return;
         this.destroyed = true;
@@ -270,22 +340,26 @@ export class Glass {
         return this.dark;
     }
 
-    /** @internal Extended-range share of the built-in materials (0 in standard range). */
+    /**
+     * @brief Extended-range share of the built-in materials (0 in standard range).
+     * @internal
+     */
     rangeShare(): number {
         return this.share;
     }
 
-    /** @internal */
-    accentColour(): Rgb {
-        return this.accent;
-    }
-
-    /** @internal An item fading out before it is removed. */
+    /**
+     * @brief An item fading out before it is removed.
+     * @internal
+     */
     leave(it: GlassItem): void {
         this.leaving.push(it);
     }
 
-    /** @internal An item gone at once. */
+    /**
+     * @brief An item gone at once.
+     * @internal
+     */
     forget(it: GlassItem): void {
         const i = this.items.indexOf(it);
         if (i >= 0) this.items.splice(i, 1);
@@ -377,24 +451,22 @@ export class Glass {
         if (this.range === "auto") this.applyRange();
     }
 
-    // Pass the surroundings to the renderer and rebuild described materials for them.
+    // Pass the surroundings to the renderer and resolve the native materials again.
     private applyEnvironment(): void {
         const bits = this.surroundings.bits(this.env);
         if (bits === this.envBits) return;
         this.envBits = bits;
         this.renderer.setEnvironment(bits);
-        for (const it of this.items) if (it.described()) it.restyle();
         this.update();
     }
 
-    // Update the renderer and canvas output range, then rebuild described materials for it.
+    // Update the renderer and canvas output range, then resolve the native materials again.
     private applyRange(): void {
         const want = this.range === "auto" ? this.surroundings.highRange : this.range;
         const on = this.renderer.setExtendedRange(want, this.headroom), share = on ? headroomShare(this.headroom) : 0;
         this.showRange(on);
         if (on !== this.extended || share !== this.share) {
             this.extended = on; this.share = share;
-            for (const it of this.items) if (it.described()) it.restyle();
         }
         this.update();
     }
@@ -434,8 +506,8 @@ export class Glass {
 }
 
 /**
- * Put glass on a canvas: create a WebGL2 context and renderer, size the canvas to its displayed size, draw when anything
- * changes, and rebuild after context restoration.
+ * @brief Put glass on a canvas: create a WebGL2 context and renderer, size the canvas to its
+ * displayed size, draw when anything changes, and rebuild after context restoration.
  * @returns The glass, or why the canvas cannot be used.
  */
 export function createGlass(canvas: HTMLCanvasElement, options: GlassOptions = {}): Result<Glass> {

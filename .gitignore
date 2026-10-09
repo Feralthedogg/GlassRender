@@ -8,6 +8,7 @@
 !/tsconfig.build.json
 !/src/
 !/api.md
+!/materials.md
 !/.github/
 
 # Runnable examples and their local package sources.
@@ -15,38 +16,43 @@
 /examples/*
 !/examples/index.html
 !/examples/quick-start.html
+!/examples/renderer.html
+!/examples/showcase.html
 !/examples/serve.mjs
 !/examples/shared/
 
-!/react/
-/react/*
-!/react/src/
-!/react/demo/
-!/react/package.json
-!/react/package-lock.json
-!/react/tsconfig.json
-!/react/tsconfig.build.json
-!/react/vite.config.js
+!/demo/
+/demo/*
 
-!/svelte/
-/svelte/*
-!/svelte/src/
-!/svelte/demo/
-!/svelte/package.json
-!/svelte/package-lock.json
-!/svelte/tsconfig.json
-!/svelte/svelte.config.js
-!/svelte/vite.config.js
+!/demo/react/
+/demo/react/*
+!/demo/react/src/
+!/demo/react/demo/
+!/demo/react/package.json
+!/demo/react/package-lock.json
+!/demo/react/tsconfig.json
+!/demo/react/tsconfig.build.json
+!/demo/react/vite.config.js
 
-!/vue/
-/vue/*
-!/vue/src/
-!/vue/demo/
-!/vue/package.json
-!/vue/package-lock.json
-!/vue/tsconfig.json
-!/vue/tsconfig.build.json
-!/vue/vite.config.js
+!/demo/svelte/
+/demo/svelte/*
+!/demo/svelte/src/
+!/demo/svelte/demo/
+!/demo/svelte/package.json
+!/demo/svelte/package-lock.json
+!/demo/svelte/tsconfig.json
+!/demo/svelte/svelte.config.js
+!/demo/svelte/vite.config.js
+
+!/demo/vue/
+/demo/vue/*
+!/demo/vue/src/
+!/demo/vue/demo/
+!/demo/vue/package.json
+!/demo/vue/package-lock.json
+!/demo/vue/tsconfig.json
+!/demo/vue/tsconfig.build.json
+!/demo/vue/vite.config.js
 
 # Finder metadata
 .DS_Store

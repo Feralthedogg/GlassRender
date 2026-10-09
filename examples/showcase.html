@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GlassRender showcase</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #111; font-family: ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  #stage { position: fixed; inset: 0; transform-origin: 100% 0; }
+  canvas#view { display: block; width: 100vw; height: 100vh; }
+  .ic { position: fixed; width: 26px; height: 26px; margin: -13px 0 0 -13px; color: #fff; opacity: 0; filter: drop-shadow(0 1px 2px rgba(0,0,0,.25)); }
+  .ic svg { width: 100%; height: 100%; display: block; }
+  #cursor { position: fixed; width: 26px; height: 26px; margin: -3px 0 0 -5px; opacity: 0; transform-origin: 5px 3px; z-index: 9; filter: drop-shadow(0 2px 4px rgba(0,0,0,.35)); }
+  #menu { position: fixed; display: none; width: 210px; color: #fff; }
+  #menu .row { display: flex; align-items: center; gap: 12px; height: 44px; font-size: 16px; font-weight: 560; letter-spacing: -.01em; opacity: 0; }
+  #menu .row svg { width: 21px; height: 21px; }
+  /* sizes follow the height of the stage (--u is one 540th of it) */
+  #newspaper-nav { position: fixed; display: none; align-items: center; justify-content: space-between; color: #201e1b; pointer-events: none; }
+  #newspaper-nav svg { width: calc(22px * var(--u)); height: calc(22px * var(--u)); flex: none; }
+  #newspaper-nav .title { display: flex; flex-direction: column; align-items: center; gap: calc(3px * var(--u)); }
+  #newspaper-nav .name { font-size: calc(16.5px * var(--u)); font-weight: 650; letter-spacing: -.01em; line-height: 1.1; white-space: nowrap; }
+  #newspaper-nav .material { position: relative; overflow: hidden; width: calc(240px * var(--u)); height: calc(17px * var(--u)); font-size: calc(12.5px * var(--u)); font-weight: 500; line-height: calc(17px * var(--u)); opacity: .62; }
+  #newspaper-nav .material span { position: absolute; inset: 0; text-align: center; white-space: nowrap; opacity: 0; }
+</style>
+</head>
+<body>
+<div id="stage">
+<canvas id="view"></canvas>
+<div id="newspaper-nav"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m14 5-7 7 7 7"/></svg><span class="title"><span class="name">Guns N’ Roses</span><span class="material"><span></span><span></span></span></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 7l4-4 4 4M5 13v6h14v-6"/></svg></div>
+<svg id="cursor" viewBox="0 0 26 26"><path d="M5 3 L5 21 L9.6 16.8 L12.6 23.4 L15.6 22.1 L12.7 15.6 L19 15.6 Z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg>
+<div id="menu"></div>
+</div>
+<script type="module">
+// The engine schedules frames with requestAnimationFrame and takes the time from it: give it our own clock, so its
+// transitions advance exactly one recorded frame at a time.
+const realFrame = window.requestAnimationFrame.bind(window);
+window.__raf = realFrame;
+const queued = new Map();
+let nextId = 0;
+window.requestAnimationFrame = (cb) => { queued.set(++nextId, cb); return nextId; };
+window.cancelAnimationFrame = (id) => { queued.delete(id); };
+function pump(now) { const list = [...queued.values()]; queued.clear(); for (const cb of list) cb(now); }
+
+const { createGlass } = await import("../dist/core.js");
+const { PRESET_NAMES } = await import("../dist/materials.js");
+const { make } = await import("./shared/showcase/art.js");
+const { makeNewspaper } = await import("./shared/showcase/newspaper.js");
+
+const W = innerWidth, H = innerHeight, R = 2, u = H / 540;
+document.documentElement.style.setProperty("--u", String(u));
+const art = make(W, H, R);
+// photographs (Pexels License): monstera by Balázs Gábor, California poppies by Soly Moses
+const photo = (src) => new Promise((done, fail) => { const im = new Image(); im.onload = () => done(im); im.onerror = fail; im.src = src; });
+const [leavesPhoto, flowersPhoto, newspaperPhoto] = await Promise.all([photo("./shared/showcase/leaves.jpg"), photo("./shared/showcase/flowers.jpg"), photo("./shared/showcase/guns-n-roses-newspaper.png")]);
+const cover = (im) => { const c = document.createElement("canvas"); c.width = W * R; c.height = H * R; c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); return c; };
+const leaves = cover(leavesPhoto), flowers = cover(flowersPhoto);
+const newspaper = makeNewspaper(W, H, R, newspaperPhoto);
+const { paper, glow } = art;
+const clamp01 = (x) => Math.min(1, Math.max(0, x));
+const easeInOut = (x) => { const t = clamp01(x); return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };
+const smooth = (x) => { const t = clamp01(x); return t * t * t * (t * (6 * t - 15) + 10); };
+const spring = (x) => { const t = clamp01(x); return 1 - Math.exp(-6 * t) * Math.cos(9 * t); };
+const lerp = (a, b, k) => a + (b - a) * k;
+
+// The newspaper bar shows each surface material once, named under its title. Aliases would repeat a profile, and the
+// focus decorations, the passthrough and the experimental profile leave no bar to read.
+const NEWS_SKIP = new Set(["identity", "inspector", "player", "call", "focusRing", "focusBackground", "vehicle"]);
+const newspaperMaterialNames = PRESET_NAMES.filter((name) => !NEWS_SKIP.has(name));
+const materialLabel = (name) => { const s = name.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase(); return s[0].toUpperCase() + s.slice(1); };
+
+// ---------------------------------------------------------------- timeline: shots (s) and the transitions (t) that join them
+// Scene 2 shows the whole page first; then the camera moves in on the bar (`in`, seconds into s2), which grows and comes
+// down towards the middle of the screen. The first material changes on the way in and the rest follow every NEWS_STEP;
+// the last one holds before the camera pulls back out over the final `out` seconds.
+const NEWS_CAM = { zoom: 1.75, y: 205 * u, in: [0.9, 2.3], out: 1.1 };
+const NEWS_FIRST = 1.6, NEWS_STEP = 0.5, NEWS_BLEND = 0.22, NEWS_HOLD = 0.8;
+const D = { s1: 1.6, t1: 1.1, s2: Math.round((NEWS_FIRST + (newspaperMaterialNames.length - 2) * NEWS_STEP + NEWS_HOLD + NEWS_CAM.out) * 20) / 20, t2: 1.1, s3: 1.1, t3: 0.7, s4: 1.6, t4: 0.8, s5: 1.5, t5: 0.7, s6: 1.9, t6: 0.8, s7: 0.9, t7: 0.7, s8: 3.4, t8: 0.7, s9: 1.3, t9: 0.8 };
+const T = {};
+let TOTAL = 0;
+for (const k of Object.keys(D)) { T[k] = TOTAL; TOTAL += D[k]; }
+window.TOTAL = TOTAL;
+window.SEGMENTS = Object.keys(D).map((k) => [k, T[k], D[k]]);
+const at = (k, t) => (t - T[k]) / D[k];
+
+// ---------------------------------------------------------------- icons and overlays
+const P = {
+    prev: '<path d="M17.5 6.6v10.8a.6.6 0 0 1-.9.5L9 12.5a.6.6 0 0 1 0-1L16.6 6a.6.6 0 0 1 .9.5z" fill="currentColor"/><path d="M6.5 6v12"/>',
+    next: '<path d="M6.5 6.6v10.8a.6.6 0 0 0 .9.5l7.6-5.4a.6.6 0 0 0 0-1L7.4 6a.6.6 0 0 0-.9.5z" fill="currentColor"/><path d="M17.5 6v12"/>',
+    play: '<path d="M8 5.8v12.4a.8.8 0 0 0 1.2.7l9.8-6.2a.8.8 0 0 0 0-1.4L9.2 5.1a.8.8 0 0 0-1.2.7z" fill="currentColor"/>',
+    pause: '<rect x="6.5" y="5" width="3.6" height="14" rx="1.2" fill="currentColor" stroke="none"/><rect x="13.9" y="5" width="3.6" height="14" rx="1.2" fill="currentColor" stroke="none"/>',
+    house: '<path d="M3.5 11 12 4l8.5 7"/><path d="M5.5 9.5V20h13V9.5"/>',
+    grid: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/>',
+    radio: '<circle cx="12" cy="12" r="2"/><path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.3 5.3a9.5 9.5 0 0 0 0 13.4M18.7 5.3a9.5 9.5 0 0 1 0 13.4"/>',
+    library: '<path d="M5 4v16M9.5 4v16M14 5l4.5 15"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    photo: '<rect x="3.5" y="5" width="17" height="14" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17 5-4.5 4 3.5 3-2.5 4 3.5"/>',
+    camera: '<path d="M4 8.5h3l1.5-2h7l1.5 2h3v10H4z"/><circle cx="12" cy="13" r="3.2"/>',
+    folder: '<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
+    scan: '<path d="M4 9V6a2 2 0 0 1 2-2h3M15 4h3a2 2 0 0 1 2 2v3M20 15v3a2 2 0 0 1-2 2h-3M9 20H6a2 2 0 0 1-2-2v-3M7 12h10"/>',
+    heart: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="currentColor"/>',
+    bookmark: '<path d="M7 4h10v16l-5-3.5L7 20z" fill="currentColor"/>',
+    share: '<path d="M12 4v11M8 8l4-4 4 4M6 13v5a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-5"/>',
+    back: '<path d="m14.5 5.5-6.5 6.5 6.5 6.5"/>',
+    more: '<circle cx="6" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1.5" fill="currentColor" stroke="none"/>'
+};
+const svg = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${P[name]}</svg>`;
+function iconEl(name, size) {
+    const d = document.createElement("div");
+    d.className = "ic"; d.innerHTML = svg(name);
+    Object.assign(d.style, { width: size + "px", height: size + "px", margin: `${-size / 2}px 0 0 ${-size / 2}px` });
+    document.getElementById("stage").append(d);
+    return d;
+}
+const show = (el, x, y, alpha) => { el.style.left = x + "px"; el.style.top = y + "px"; el.style.opacity = String(clamp01(alpha)); };
+const cursor = document.getElementById("cursor");
+const pointer = (x, y, alpha, down) => { show(cursor, x, y, alpha); cursor.style.transform = down ? "scale(.82)" : "none"; };
+// a pointer that comes in from (fx, fy), presses (px, py) from `down` to `up` seconds and leaves towards (ox, oy)
+function visit(s, fx, fy, px, py, ox, oy, arrive, down, up, leave) {
+    const k1 = easeInOut(s / arrive), k2 = easeInOut((s - up - 0.08) / leave);
+    pointer(lerp(fx, px, k1) + (ox - px) * k2, lerp(fy, py, k1) + (oy - py) * k2, Math.min(clamp01(s / 0.15), 1 - k2), s > down && s < up);
+    return s > down && s < up;
+}
+
+// ---------------------------------------------------------------- backdrops
+const studioPlain = paper((g) => {
+    const base = g.createLinearGradient(0, 0, W * 0.75, H * 1.1);
+    base.addColorStop(0, "#f4f5f7"); base.addColorStop(0.6, "#d3d5da"); base.addColorStop(1, "#9a9da4");
+    g.fillStyle = base; g.fillRect(0, 0, W, H);
+    glow(g, W * 0.3, H * 0.05, W * 0.6, "255, 255, 255", 0.5);
+    g.fillStyle = "#1f2126"; g.font = `700 ${132 * u}px ui-sans-serif, system-ui, sans-serif`;
+    g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("GlassRender", W / 2, H * 0.5);
+});
+const studioGrid = paper((g) => {
+    const base = g.createLinearGradient(0, 0, W * 0.75, H * 1.1);
+    base.addColorStop(0, "#f3f4f6"); base.addColorStop(0.55, "#c9cbd0"); base.addColorStop(1, "#7d8087");
+    g.fillStyle = base; g.fillRect(0, 0, W, H);
+    glow(g, W * 0.3, H * 0.05, W * 0.6, "255, 255, 255", 0.5);
+    g.strokeStyle = "rgba(38, 40, 46, 0.42)"; g.lineWidth = 1;
+    const tile = W / 4.6;
+    for (let x = tile * 0.28; x < W; x += tile) { g.beginPath(); g.moveTo(Math.round(x) + 0.5, 0); g.lineTo(Math.round(x) + 0.5, H); g.stroke(); }
+    for (let y = tile * 0.36; y < H; y += tile) { g.beginPath(); g.moveTo(0, Math.round(y) + 0.5); g.lineTo(W, Math.round(y) + 0.5); g.stroke(); }
+});
+const aurora = paper((g) => {
+    const m = Math.max(W, H), n = Math.min(W, H);
+    const base = g.createLinearGradient(0, 0, W * 0.3, H);
+    base.addColorStop(0, "#060a1c"); base.addColorStop(1, "#12071f");
+    g.fillStyle = base; g.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = "lighter";
+    glow(g, W * 0.12, H * 0.18, m * 0.42, "0, 140, 255", 0.55); glow(g, W * 0.55, H * 0.30, m * 0.40, "118, 70, 255", 0.55);
+    glow(g, W * 0.28, H * 0.92, m * 0.48, "255, 40, 130", 0.55); glow(g, W * 0.88, H * 0.78, m * 0.46, "255, 105, 55", 0.6);
+    glow(g, W * 0.95, H * 0.08, m * 0.26, "255, 196, 80", 0.4);
+    const silk = (y, amp, thick, left, right) => {
+        const curve = (o) => [-W * 0.05, y + o, W * 0.3, y - amp + o * 0.6, W * 0.65, y + amp + o * 1.3, W * 1.05, y - amp * 0.3 + o];
+        const colour = (a) => { const f = g.createLinearGradient(0, 0, W, 0);
+            f.addColorStop(0, `rgba(${left}, 0)`); f.addColorStop(0.3, `rgba(${left}, ${a})`); f.addColorStop(0.72, `rgba(${right}, ${a})`); f.addColorStop(1, `rgba(${right}, 0)`); return f; };
+        const top = curve(0);
+        g.fillStyle = colour(0.016);
+        for (let i = 1; i <= 24; i++) { const b = curve(thick * i / 24);
+            g.beginPath(); g.moveTo(top[0], top[1]); g.bezierCurveTo(top[2], top[3], top[4], top[5], top[6], top[7]);
+            g.lineTo(b[6], b[7]); g.bezierCurveTo(b[4], b[5], b[2], b[3], b[0], b[1]); g.closePath(); g.fill(); }
+        g.strokeStyle = colour(0.55); g.lineWidth = Math.max(1, n / 500);
+        g.beginPath(); g.moveTo(top[0], top[1]); g.bezierCurveTo(top[2], top[3], top[4], top[5], top[6], top[7]); g.stroke();
+    };
+    silk(H * 0.36, H * 0.13, n * 0.16, "110, 190, 255", "230, 120, 255");
+    silk(H * 0.63, H * 0.09, n * 0.12, "255, 130, 200", "255, 180, 110");
+    g.globalCompositeOperation = "source-over";
+    g.strokeStyle = "rgba(255, 255, 255, 0.13)"; g.lineWidth = Math.max(1, n / 650);
+    for (let i = 0; i < 12; i++) { g.beginPath(); g.arc(W * 0.5, H * 1.55, m * (0.62 + i * 0.055), 0, Math.PI * 2); g.stroke(); }
+});
+const dunes = paper((g) => {
+    const n = Math.min(W, H);
+    const s = g.createLinearGradient(0, 0, 0, H * 0.75);
+    s.addColorStop(0, "#1d1442"); s.addColorStop(0.45, "#7a3a7a"); s.addColorStop(0.8, "#f07a5d"); s.addColorStop(1, "#ffc28a");
+    g.fillStyle = s; g.fillRect(0, 0, W, H);
+    const sx = W * 0.32, sy = H * 0.5, sr = n * 0.13;
+    glow(g, sx, sy, sr * 4.5, "255, 190, 120", 0.55);
+    const sun = g.createLinearGradient(0, sy - sr, 0, sy + sr);
+    sun.addColorStop(0, "#fff3c4"); sun.addColorStop(1, "#ffb067");
+    g.fillStyle = sun; g.beginPath(); g.arc(sx, sy, sr, 0, Math.PI * 2); g.fill();
+    g.fillStyle = "#f8956b";
+    for (let i = 0; i < 5; i++) g.fillRect(sx - sr, sy + sr * (0.15 + i * 0.18), sr * 2, sr * (0.03 + i * 0.018));
+    [["#f6a07a", "#e2795f", 0.56, 0.05, 1.3], ["#d9645e", "#b34a58", 0.63, 0.07, 2.1], ["#9c3b5c", "#7a2b55", 0.71, 0.08, 1.7],
+        ["#5e2152", "#43173f", 0.80, 0.09, 2.6], ["#2f1036", "#1c0a24", 0.90, 0.07, 1.9]].forEach(([top, bottom, base, amp, freq], i) => {
+        const f = g.createLinearGradient(0, H * (base - amp), 0, H);
+        f.addColorStop(0, top); f.addColorStop(1, bottom);
+        g.fillStyle = f; g.beginPath(); g.moveTo(0, H);
+        for (let x = 0; x <= W + 2; x += Math.max(2, W / 240)) { const t = x / W;
+            g.lineTo(x, H * (base - amp * (0.55 * Math.sin(t * Math.PI * freq + i * 1.7) + 0.45 * Math.sin(t * Math.PI * freq * 2.3 + i)))); }
+        g.lineTo(W, H); g.closePath(); g.fill();
+        g.strokeStyle = "rgba(255, 220, 190, 0.35)"; g.lineWidth = Math.max(1, n / 600); g.stroke();
+    });
+});
+
+// The page of light and dark cards is a sheet: the press brings it up over the stone, it scrolls under the small
+// glass, and it slides off the top to leave the studio grid. The pictures behind it stay still (a GIF pays for every
+// pixel that moves).
+const CRUISE = 300 * u, ENTER = 1100 * u, LEAVE = 900 * u, SHEET_R = 22 * u;
+const PAGE = Math.round(CRUISE * D.s8 + H);
+const CARDS = [200, 240, 420, 240, 260, 200];
+const TITLES = ["Notes", "Night sky", "Field guide", "After dark", "Reading list", "Stars"];
+const sheet = (() => {
+    const c = document.createElement("canvas");
+    c.width = W * R; c.height = PAGE * R;
+    const g = c.getContext("2d");
+    g.scale(R, R);
+    const rnd = art.random(21);
+    let y = 0, i = 0;
+    while (y < PAGE) {
+        const h = Math.min((CARDS[i] ?? 260) * u, PAGE - y);
+        g.font = `700 ${64 * u}px ui-sans-serif, system-ui, sans-serif`;
+        g.textBaseline = "alphabetic";
+        if (i % 2) {
+            g.fillStyle = "#0b0d16"; g.fillRect(0, y, W, h);
+            for (let k = 0; k < 40; k++) { g.fillStyle = `rgba(255,255,255,${0.2 + rnd() * 0.5})`; g.beginPath(); g.arc(rnd() * W, y + rnd() * h, rnd() * 1.4 * u + 0.3, 0, 7); g.fill(); }
+            g.fillStyle = "#f4f5f8"; g.fillText(TITLES[i] ?? "", 110 * u, y + h * 0.5 + 22 * u);
+        } else {
+            g.fillStyle = "#fbfbf9"; g.fillRect(0, y, W, h);
+            g.fillStyle = "#15171c"; g.fillText(TITLES[i] ?? "", 110 * u, y + 92 * u);
+            g.fillStyle = "#e9e8e3";
+            for (let k = 0; y + (124 + k * 30) * u + 14 * u < y + h - 20 * u; k++) g.fillRect(110 * u, y + (124 + k * 30) * u, W * (0.45 + rnd() * 0.3), 14 * u);
+        }
+        y += h; i++;
+    }
+    return c;
+})();
+// how far the sheet has risen, in Hermite pieces so position and speed match where they meet: it comes in fast,
+// slows to a cruise and leaves with speed
+const h01 = (x) => x * x * (3 - 2 * x), h10 = (x) => x * x * x - 2 * x * x + x, h11 = (x) => x * x * x - x * x;
+function scrollAt(t) {
+    if (t < T.t7) return 0;
+    if (t < T.s8) { const x = at("t7", t); return h10(x) * D.t7 * ENTER + h01(x) * H + h11(x) * D.t7 * CRUISE; }
+    if (t < T.t8) return H + (t - T.s8) * CRUISE;
+    if (t < T.s9) { const x = at("t8", t), p0 = H + D.s8 * CRUISE; return p0 + h10(x) * D.t8 * CRUISE + h01(x) * (H + PAGE - p0) + h11(x) * D.t8 * LEAVE; }
+    return H + PAGE;
+}
+const sheetTop = (t) => Math.round((H - scrollAt(t)) * R) / R, sheetBottom = (t) => sheetTop(t) + PAGE;
+// the first moment in [from, to) at which `test` holds
+function moment(from, to, test) { for (let t = from; t < to; t += 0.001) if (test(t)) return t; return to; }
+
+// the picture the glass sees, composed every frame so a scene can open out of the last one
+const mix = document.createElement("canvas");
+mix.width = W * R; mix.height = H * R;
+const mg = mix.getContext("2d");
+const layer = document.createElement("canvas");
+layer.width = W * R; layer.height = H * R;
+const lg = layer.getContext("2d");
+// Opaque pages share one edge, so their text never doubles during the change.
+function pushUp(from, to, k) {
+    const offset = Math.round(mix.height * smooth(k));
+    mg.drawImage(from, 0, -offset);
+    mg.drawImage(to, 0, mix.height - offset);
+}
+// the next picture opens from a point (where the glass is) with a soft edge
+function reveal(from, to, cx, cy, k) {
+    mg.drawImage(from, 0, 0);
+    if (k <= 0) return;
+    const far = Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy)), soft = 56 * u, r = (far + soft) * easeInOut(k);
+    lg.globalCompositeOperation = "source-over";
+    lg.drawImage(to, 0, 0);
+    lg.globalCompositeOperation = "destination-in";
+    const f = lg.createRadialGradient(cx * R, cy * R, Math.max(0, r - soft) * R, cx * R, cy * R, Math.max(1, r) * R);
+    f.addColorStop(0, "rgba(0,0,0,1)"); f.addColorStop(1, "rgba(0,0,0,0)");
+    lg.fillStyle = f; lg.fillRect(0, 0, layer.width, layer.height);
+    mg.drawImage(layer, 0, 0);
+}
+// the next picture slides in behind a soft edge that travels along (dx, dy), the way the glass moves
+function wipe(from, to, dx, dy, k) {
+    mg.drawImage(from, 0, 0);
+    if (k <= 0) return;
+    const soft = 56 * u, reach = Math.abs(dx) * W + Math.abs(dy) * H + soft, d = reach * easeInOut(k);
+    // the edge starts at the side the motion comes from
+    const x0 = dx < 0 ? W : dx > 0 ? 0 : 0, y0 = dy < 0 ? H : dy > 0 ? 0 : 0;
+    const ex = x0 + dx * d, ey = y0 + dy * d;
+    lg.globalCompositeOperation = "source-over";
+    lg.drawImage(to, 0, 0);
+    lg.globalCompositeOperation = "destination-in";
+    const f = lg.createLinearGradient((ex - dx * soft) * R, (ey - dy * soft) * R, ex * R, ey * R);
+    f.addColorStop(0, "rgba(0,0,0,1)"); f.addColorStop(1, "rgba(0,0,0,0)");
+    lg.fillStyle = f; lg.fillRect(0, 0, layer.width, layer.height);
+    mg.drawImage(layer, 0, 0);
+}
+
+// ---------------------------------------------------------------- the glass
+const glass = createGlass(document.getElementById("view"), { appearance: "dark", backdrop: mix, live: true, maxPixelRatio: R }).value;
+const off = { x: 0, y: 0, width: 10, height: 10, visible: false, transition: "materialize" };
+// Use the control profile for the lens and an adaptive standard profile for the newspaper navigation.
+const lens = glass.add({ ...off, preset: "control", appearance: "light" });
+// Matching navigation frames let the presets crossfade while the reader stays anchored.
+const capsule = glass.add({ ...off, preset: "standard", appearance: "light", transition: "none" });
+const newspaperMaterials =[capsule, ...newspaperMaterialNames.slice(1).map(preset => glass.add({ ...off, preset, appearance: "light", adaptive: preset === "menu", transition: "none" }))];
+function clockMask(text) {
+    const c = document.createElement("canvas");
+    c.width = 1200; c.height = 480;
+    const g = c.getContext("2d");
+    g.fillStyle = "#fff"; g.textAlign = "center"; g.textBaseline = "middle";
+    g.font = "760 470px ui-rounded, ui-sans-serif, system-ui, sans-serif";
+    g.fillText(text, 600, 260);
+    return c;
+}
+const clockCanvas = clockMask("9:41");
+const clock = glass.add({ ...off, preset: "clear", mask: clockCanvas });
+// one piece of glass that is the playback buttons, then the tab bar, then a button and its menu, then four buttons
+const chain = glass.addGroup({ preset: "standard", spacing: 26 * u, visible: false, transition: "materialize" });
+const links = [0, 1, 2, 3].map(() => chain.add({ x: 0, y: 0, width: 10, height: 10 }));
+const selector = glass.add({ ...off, preset: "control" });
+const tints = [0, 1, 2, 3].map(() => glass.add({ ...off, preset: "standard" }));
+const back = glass.add({ ...off });
+// the two buttons on the right are one piece of glass, so they can run together into a single drop
+const pair = glass.addGroup({ spacing: 0, visible: false, transition: "materialize" });
+const pairLinks = [0, 1].map(() => pair.add({ x: 0, y: 0, width: 10, height: 10 }));
+const flow = glass.addGroup({ preset: "control", appearance: "light", adaptive: false, spacing: 70 * u, visible: false, transition: "materialize" });
+const blob = flow.add({ x: 0, y: 0, width: 10, height: 10 }), long = flow.add({ x: 0, y: 0, width: 10, height: 10 });
+const knob = glass.add({ ...off, preset: "control", appearance: "light" });
+
+const mediaIcons = [iconEl("prev", 26), iconEl("pause", 34), iconEl("next", 26)];
+const tabIcons = ["house", "grid", "radio", "library"].map((n) => iconEl(n, 30));
+const plusIcon = iconEl("plus", 28);
+const menu = document.getElementById("menu");
+menu.innerHTML = [["photo", "Photos"], ["camera", "Camera"], ["folder", "Files"], ["scan", "Scan"]].map(([i, t]) => `<div class="row">${svg(i)}<span>${t}</span></div>`).join("");
+const rows = [...menu.children];
+const tintIcons = ["photo", "heart", "bookmark", "share"].map((n) => iconEl(n, 30));
+const navIcons = [iconEl("back", 24), iconEl("share", 22), iconEl("more", 24)];
+const ICONS = [...mediaIcons, ...tabIcons, plusIcon, ...tintIcons, ...navIcons];
+
+// ---------------------------------------------------------------- places shared by neighbouring shots
+const C = { x: W / 2, y: H / 2 };
+const NEWS_NAV = { w: 398 * u, h: 60 * u, y: 48 * u };
+const LENS_START = { x: W * 0.14, y: H * 0.5 }, LENS_D = 210 * u;
+const CLOCK_Y = H * 0.42;
+const MEDIA = { y: CLOCK_Y, xs: [W / 2 - 128 * u, W / 2, W / 2 + 128 * u], d: [74 * u, 100 * u, 74 * u] };
+const BAR = { w: 480 * u, h: 84 * u, y: H * 0.6 };
+BAR.x = W / 2 - BAR.w / 2; BAR.slot = BAR.w / 4; BAR.cy = BAR.y + BAR.h / 2;
+const PLUS = { ax: W * 0.66, ay: H * 0.74, d: 66 * u };
+PLUS.cx = PLUS.ax - PLUS.d / 2; PLUS.cy = PLUS.ay - PLUS.d / 2;
+const ROW = { d: 96 * u, gap: 30 * u, y: H * 0.5 };
+ROW.x0 = W / 2 - (ROW.d * 4 + ROW.gap * 3) / 2;
+const NAV = { d: 50 * u, y: 34 * u, xs: [30 * u, W - 30 * u - 50 * u * 2 - 14 * u, W - 30 * u - 50 * u] };
+// beats of the sheet scene, in seconds into s8: the camera is in by `in`, the two buttons run together from `merge`, and
+// from `float` the drop rises to the middle of the screen and grows while the camera pulls out
+const S8 = { in: 0.55, merge: 1.55, float: 2.2 };
+const DROP = { d: 62 * u, end: 300 * u };
+const FLOW = { cy: H / 2, pill: { x: 60 * u, w: 325 * u, h: 150 * u } };
+// the sheet decides when the glass around it comes and goes
+const TINTS_GONE = moment(T.t7, T.s8, (t) => sheetTop(t) < ROW.y + ROW.d / 2 + 60 * u);
+const NAV_FROM = moment(T.t7, T.t8, (t) => sheetTop(t) < 110 * u);
+const NAV_GONE = moment(T.t8, T.s9, (t) => sheetBottom(t) < NAV.y + NAV.d + 50 * u);
+// the frosted drop hands over to clear glass as it starts to rise; that glass stays to the end of the loop
+const FLOW_FROM = T.s8 + S8.float;
+
+const rect = (x, y, w, h, r) => ({ x, y, width: w, height: h, radius: r });
+// shown while `on`; once hidden at `gone` (seconds) it also loses its opacity over `fade`, so no outline lingers. The
+// time since `gone` is counted round the loop, so glass hidden near the end stays faded when the loop starts again.
+const presence = (item, on, t, gone, fade) => item.set({ visible: on, opacity: on ? 1 : 1 - clamp01((((t - gone) % TOTAL) + TOTAL) % TOTAL / fade) });
+const circle = (cx, cy, d) => rect(cx - d / 2, cy - d / 2, d, d, d / 2);
+const centre = (r) => [r.x + r.width / 2, r.y + r.height / 2];
+const mixRect = (a, b, k) => rect(lerp(a.x, b.x, k), lerp(a.y, b.y, k), lerp(a.width, b.width, k), lerp(a.height, b.height, k), lerp(a.radius, b.radius, k));
+// four members for three buttons: the fourth doubles the middle one
+const mediaRect = (i, flex = 1) => { const j = i === 3 ? 1 : i; return circle(MEDIA.xs[j], MEDIA.y, MEDIA.d[j] * (j === 1 ? flex : 1)); };
+const barRect = rect(BAR.x, BAR.y, BAR.w, BAR.h, BAR.h / 2);
+const plusRect = (k) => { const w = lerp(PLUS.d, 250 * u, k), h = lerp(PLUS.d, 232 * u, k); return rect(PLUS.ax - w, PLUS.ay - h, w, h, lerp(PLUS.d / 2, 30 * u, clamp01(k * 1.4))); };
+const rowRect = (i, dy = 0) => rect(ROW.x0 + i * (ROW.d + ROW.gap), ROW.y - ROW.d / 2 + dy, ROW.d, ROW.d, ROW.d / 2);
+
+// the camera: while the sheet scrolls it moves in on the small glass in the top right corner, so its change from dark
+// to light is seen up close, and pulls out again while the drop rises (zoom eased in log scale, anchored top right)
+const ZOOM = 2.4, stage = document.getElementById("stage");
+// how far scene 2's camera has moved in on the bar, 0..1 (its zoom is eased in log scale, anchored at the top centre)
+function newsCamAt(t) {
+    if (t < T.s2 || t >= T.t2) return 0;
+    const s = t - T.s2;
+    return easeInOut((s - NEWS_CAM.in[0]) / (NEWS_CAM.in[1] - NEWS_CAM.in[0])) - easeInOut((s - D.s2 + NEWS_CAM.out) / NEWS_CAM.out);
+}
+const newsZoom = (cam) => Math.exp(Math.log(NEWS_CAM.zoom) * cam);
+function zoomAt(t) {
+    if (t < T.s8 || t >= T.t8) return 1;
+    const s = t - T.s8, k = easeInOut(s / S8.in) - easeInOut((s - S8.float) / (D.s8 - S8.float));
+    return Math.exp(Math.log(ZOOM) * k);
+}
+// The drop rises from where the pair met to the middle of the screen and grows. The path and size are set on screen
+// and turned into the glass's own pixels through the camera (anchored top right).
+function dropAt(t) {
+    const c = t < T.t8 ? clamp01((t - T.s8 - S8.float) / (D.s8 - S8.float)) : 1, z = zoomAt(t), k = easeInOut(c);
+    const mid = W - 30 * u - 57 * u, cy = 34 * u + 25 * u;
+    const s0x = W - (W - mid) * ZOOM, s0y = cy * ZOOM, qx = W * 0.56, qy = s0y + 10 * u, s1x = W / 2, s1y = H / 2;
+    const sx = (1 - k) * (1 - k) * s0x + 2 * (1 - k) * k * qx + k * k * s1x, sy = (1 - k) * (1 - k) * s0y + 2 * (1 - k) * k * qy + k * k * s1y;
+    const ds = lerp(DROP.d * ZOOM, DROP.end, easeInOut(c)), wob = 0.05 * Math.sin(Math.PI * 2.5 * c) * (1 - c);
+    const ex = W - (W - sx) / z, ey = sy / z, w = ds * (1 + wob) / z, h = ds * (1 - wob) / z;
+    return rect(ex - w / 2, ey - h / 2, w, h, Math.min(w, h) / 2);
+}
+
+// the turn of the rim lights, continuous over the loop (only its sine and cosine are used)
+function lightAt(t) {
+    if (t < T.t1) return lerp(-0.4, 0.2, easeInOut(at("s1", t)));
+    if (t < T.s2) return lerp(0.2, -0.5, smooth(at("t1", t)));
+    if (t < T.t2) return lerp(-0.5, 0.25, easeInOut(at("s2", t)));
+    if (t < T.t3) return lerp(0.25, 0.65, smooth((t - T.t2) / (D.t2 + D.s3)));
+    if (t < T.s4) return lerp(0.65, 0, easeInOut(at("t3", t)));
+    if (t < T.s9) return 0;
+    if (t < T.t9) return lerp(0, 0.4, easeInOut(at("s9", t)));
+    return lerp(0.4, -0.4, easeInOut(at("t9", t)));
+}
+
+// Ease into a steady downward read, then decelerate before the next scene.
+function newspaperScroll(t) {
+    const duration = D.s2 - 0.4, ramp = 0.35, s = Math.min(duration, Math.max(0, t - T.s2 - 0.25));
+    const speed = newspaper.distance / (duration - ramp);
+    if (s < ramp) { const p = s / ramp; return speed * ramp * (p ** 3 - p ** 4 / 2); }
+    if (s <= duration - ramp) return speed * (s - ramp / 2);
+    const p = (s - duration + ramp) / ramp;
+    return speed * (duration - ramp * 1.5) + speed * ramp * (p - p ** 3 + p ** 4 / 2);
+}
+function drawBackdrop(t) {
+    const news = t >= T.t1 && t < T.s3 ? newspaper.at(newspaperScroll(t)) : null;
+    if (t < T.t1) mg.drawImage(studioPlain, 0, 0);
+    else if (t < T.s2) pushUp(studioPlain, news, at("t1", t));
+    else if (t < T.t2) mg.drawImage(news, 0, 0);
+    else if (t < T.s3) pushUp(news, leaves, at("t2", t));
+    else if (t < T.t3) mg.drawImage(leaves, 0, 0);
+    else if (t < T.s4) reveal(leaves, flowers, C.x, MEDIA.y, at("t3", t));
+    else if (t < T.t4) mg.drawImage(flowers, 0, 0);
+    else if (t < T.s5) wipe(flowers, aurora, 0, 1, at("t4", t));
+    else if (t < T.t5) mg.drawImage(aurora, 0, 0);
+    else if (t < T.s6) reveal(aurora, dunes, PLUS.cx, PLUS.cy, at("t5", t));
+    else if (t < T.t6) mg.drawImage(dunes, 0, 0);
+    else if (t < T.s7) wipe(dunes, art.stone, -1, 0, at("t6", t));
+    else if (t < T.t7) mg.drawImage(art.stone, 0, 0);
+    else if (t < T.s9) drawSheet(t);
+    else if (t < T.t9) mg.drawImage(studioGrid, 0, 0);
+    else reveal(studioGrid, studioPlain, LENS_START.x, LENS_START.y, at("t9", t));
+}
+function drawSheet(t) {
+    const top = sheetTop(t), y0 = Math.max(0, top), y1 = Math.min(H, top + PAGE);
+    mg.drawImage(scrollAt(t) < H ? art.stone : studioGrid, 0, 0);
+    if (y1 <= y0) return;
+    const edge = new Path2D();
+    edge.roundRect(0, top * R, W * R, PAGE * R, SHEET_R * R);
+    mg.save();
+    mg.shadowColor = "rgba(0, 0, 0, 0.32)"; mg.shadowBlur = 34 * u * R;
+    mg.fillStyle = "#000"; mg.fill(edge);
+    mg.restore();
+    mg.save();
+    mg.clip(edge);
+    mg.drawImage(sheet, 0, (y0 - top) * R, W * R, (y1 - y0) * R, 0, y0 * R, W * R, (y1 - y0) * R);
+    mg.restore();
+}
+
+function frameAt(t) {
+    for (const el of ICONS) el.style.opacity = "0";
+    cursor.style.opacity = "0";
+    menu.style.display = "none";
+    document.getElementById("newspaper-nav").style.display = "none";
+    drawBackdrop(t);
+    glass.setLightAngle(lightAt(t));
+    const cam = newsCamAt(t), z = cam > 0 ? newsZoom(cam) : zoomAt(t);
+    stage.style.transformOrigin = cam > 0 ? "50% 0" : "100% 0";
+    stage.style.transform = z > 1.0001 ? `scale(${z})` : "none";
+
+    // ---- each piece of glass follows its page, keeping its content and refraction together during a change
+    let lensOn = false, capsuleAlpha = 0, newsShape = null;
+    if (t < T.t1) {
+        const k = easeInOut(at("s1", t)), v = Math.sin(Math.PI * k), w = LENS_D * (1 + 0.12 * v), h = LENS_D * (1 - 0.06 * v);
+        const x = lerp(LENS_START.x, C.x, k), y = C.y + 22 * u * Math.sin(Math.PI * k);
+        lens.set(rect(x - w / 2, y - h / 2, w, h, Math.min(w, h) / 2));
+        lensOn = true;
+    } else if (t < T.s2) {
+        const k = smooth(at("t1", t));
+        lens.set(circle(C.x, C.y - H * k, LENS_D));
+        newsShape = rect(C.x - NEWS_NAV.w / 2, NEWS_NAV.y + H * (1 - k) - NEWS_NAV.h / 2, NEWS_NAV.w, NEWS_NAV.h, NEWS_NAV.h / 2);
+        capsuleAlpha = 1;
+        lensOn = true;
+    } else if (t < T.s3) {
+        // Keep the navigation attached to the outgoing page instead of stretching it into the clock. While the camera is
+        // in, the bar sits lower on the page, so on screen it moves down from the top as it grows.
+        const k = t < T.t2 ? 0 : smooth(at("t2", t)), cam = newsCamAt(t);
+        const w = NEWS_NAV.w, h = NEWS_NAV.h, y = lerp(NEWS_NAV.y, NEWS_CAM.y, cam) / newsZoom(cam) - H * k;
+        newsShape = rect(C.x - w / 2, y - h / 2, w, h, h / 2);
+        capsule.set(newsShape);
+        capsuleAlpha = t < T.t2 ? 1 : 1 - smooth(at("t2", t) / 0.35);
+    } else if (t >= T.t9) {
+        // the end of the loop: the lens condenses where the first shot begins
+        lens.set(circle(LENS_START.x, LENS_START.y, LENS_D));
+        lensOn = t >= T.t9 + D.t9 * 0.3;
+    }
+    presence(lens, lensOn, t, T.t2 + 0.08, 0.3);
+    if (lensOn) lens.set({ opacity: 1 });
+    const phase = Math.max(0, t - T.s2 - NEWS_FIRST + NEWS_STEP) / NEWS_STEP, current = Math.min(newspaperMaterials.length - 1, Math.floor(phase));
+    const previous = Math.max(0, current - 1), blend = current === previous ? 1 : easeInOut((phase - current) * NEWS_STEP / NEWS_BLEND);
+    newspaperMaterials.forEach((material, i) => {
+        const weight = i === current ? blend : i === previous ? 1 - blend : 0, opacity = capsuleAlpha * weight;
+        if (newsShape) material.set({ ...newsShape, ...(i > 0 && newspaperMaterialNames[i] !== "menu" ? { appearance: newspaper.appearanceAt(newspaperScroll(t), newsShape.y + newsShape.height / 2) } : {}) });
+        material.set({ visible: opacity > 0, opacity });
+    });
+    if (newsShape) {
+        const nav = document.getElementById("newspaper-nav");
+        const alpha = t < T.s2 ? smooth((capsuleAlpha - 0.85) / 0.15) : t < T.t2 ? 1 : 1 - smooth(at("t2", t) / 0.35);
+        // the text takes the ink of the glass under it, mixed the way the two materials are
+        const dark = (i) => newspaperMaterials[i].shownScheme === "dark" ? 1 : 0, ink = dark(previous) * (1 - blend) + dark(current) * blend;
+        Object.assign(nav.style, { display: "flex", left: C.x - NEWS_NAV.w / 2 + 22 * u + "px", top: newsShape.y + newsShape.height / 2 - NEWS_NAV.h / 2 + "px",
+            width: NEWS_NAV.w - 44 * u + "px", height: NEWS_NAV.h + "px", opacity: String(alpha),
+            color: `rgb(${Math.round(lerp(32, 255, ink))}, ${Math.round(lerp(30, 255, ink))}, ${Math.round(lerp(27, 255, ink))})` });
+        // The material's name rides under the title. It settles in once the bar is in place; at each change the line rolls
+        // up in step with the glass, the old name leaving at the top as the new one comes in from below.
+        const shown = smooth((t - T.s2) / 0.35), lift = 17 * u, [leaving, arriving] = nav.querySelectorAll(".material span");
+        nav.querySelector(".title").style.transform = `translateY(${(10 * u * (1 - shown)).toFixed(2)}px)`;
+        const label = (el, i) => { const text = materialLabel(newspaperMaterialNames[i]); if (el.textContent !== text) el.textContent = text; };
+        label(leaving, previous); label(arriving, current);
+        Object.assign(leaving.style, { opacity: String(shown * (1 - blend)), transform: `translateY(${(-lift * blend).toFixed(2)}px)` });
+        Object.assign(arriving.style, { opacity: String(shown * blend), transform: `translateY(${(lift * (1 - blend)).toFixed(2)}px)` });
+    }
+
+    // ---- the clock rides in with the leaves, so its refraction samples its own photograph throughout
+    {
+        const on = t >= T.t2 && t < T.t3 + 0.05;
+        const k = 0.96 + 0.07 * easeInOut((t - T.t2) / (D.t2 + D.s3 + D.t3)), w = 600 * u * k, h = 240 * u * k;
+        const incoming = t < T.s3 ? H * (1 - smooth(at("t2", t))) : 0;
+        clock.set({ x: C.x - w / 2, y: CLOCK_Y + incoming - h / 2, width: w, height: h });
+        presence(clock, on, t, T.t3 + 0.05, 0.3);
+    }
+
+    // ---- one piece of glass: playback buttons, tab bar, button and menu, four buttons
+    let rects = null, chainOn = false, selectorOn = false, pressed = false;
+    if (t >= T.t3 && t < T.t4) {
+        const s = t - T.s4, flex = t < T.s4 ? 1 : 1 + 0.08 * Math.sin(Math.PI * clamp01((s - 0.75) / 0.45));
+        rects = [0, 1, 2, 3].map((i) => mediaRect(i, flex));
+        chainOn = true;
+        const appear = t < T.s4 ? at("t3", t) * 1.8 - 0.6 : 1;
+        mediaIcons.forEach((ic, i) => show(ic, MEDIA.xs[i], MEDIA.y, appear));
+        if (t >= T.s4) pressed = visit(s, W * 0.86, H * 0.95, MEDIA.xs[1] + 10 * u, MEDIA.y + 14 * u, W * 0.95, H * 1.1, 0.7, 0.75, 0.97, 0.5);
+        mediaIcons[1].innerHTML = svg(t >= T.s4 && s > 0.86 ? "play" : "pause");
+    } else if (t >= T.t4 && t < T.t5) {
+        // the three buttons flow together into the bar
+        const k = t < T.s5 ? easeInOut(at("t4", t)) : 1;
+        rects = [0, 1, 2, 3].map((i) => mixRect(mediaRect(i), barRect, k));
+        chainOn = true;
+        mediaIcons.forEach((ic, i) => { const [x, y] = centre(rects[i]); show(ic, x, y, 1 - k * 2.5); });
+        const s = t - T.s5, ks = t < T.s5 ? 0 : spring((s - 0.7) / 0.75), v = t < T.s5 ? 0 : Math.sin(Math.PI * clamp01((s - 0.7) / 0.5));
+        tabIcons.forEach((ic, i) => {
+            show(ic, BAR.x + BAR.slot * (i + 0.5), BAR.cy, t < T.s5 ? k * 2.2 - 1.2 : 1);
+            ic.style.color = (ks > 0.5 ? i === 2 : i === 0) ? "#5fb0ff" : "rgba(255,255,255,.92)";
+        });
+        selectorOn = t >= T.s5 - 0.1;
+        const sw = (BAR.slot - 12 * u) * (1 + 0.45 * v), sh = (BAR.h - 14 * u) * (1 - 0.1 * v), sx = BAR.x + BAR.slot * (lerp(0, 2, ks) + 0.5);
+        selector.set(rect(sx - sw / 2, BAR.cy - sh / 2, sw, sh, sh / 2));
+        if (t >= T.s5) visit(s, W * 0.8, H * 0.97, BAR.x + BAR.slot * 2.5 + 6 * u, BAR.cy + 10 * u, W * 0.92, H * 1.15, 0.6, 0.6, 0.76, 0.5);
+    } else if (t >= T.t5 && t < T.t6) {
+        if (t < T.s6) {
+            // the bar gathers into a single button, the selector with it
+            const k = easeInOut(at("t5", t));
+            rects = [0, 1, 2, 3].map(() => mixRect(barRect, plusRect(0), k));
+            const sw = BAR.slot - 12 * u, sh = BAR.h - 14 * u;
+            selector.set(mixRect(rect(BAR.x + BAR.slot * 2.5 - sw / 2, BAR.cy - sh / 2, sw, sh, sh / 2), plusRect(0), k));
+            selectorOn = t < T.t5 + 0.08;
+            tabIcons.forEach((ic, i) => show(ic, lerp(BAR.x + BAR.slot * (i + 0.5), PLUS.cx, k), lerp(BAR.cy, PLUS.cy, k), 1 - k * 2.5));
+            tabIcons.forEach((ic, i) => { ic.style.color = i === 2 ? "#5fb0ff" : "rgba(255,255,255,.92)"; });
+            show(plusIcon, PLUS.cx, PLUS.cy, k * 2.2 - 1.2);
+        } else {
+            const s = t - T.s6, k = Math.max(0, spring((s - 0.45) / 0.6) - easeInOut((s - 1.4) / 0.45));
+            rects = [0, 1, 2, 3].map(() => plusRect(k));
+            show(plusIcon, PLUS.cx, PLUS.cy, 1 - k * 2);
+            menu.style.display = "block";
+            Object.assign(menu.style, { left: PLUS.ax - 250 * u + 24 * u + "px", top: PLUS.ay - 232 * u + 22 * u + "px" });
+            // the rows show only while the panel is (nearly) open, so they never hang outside it
+            rows.forEach((row, i) => { row.style.opacity = String(clamp01((k - 0.72 - i * 0.05) / 0.14)); });
+            visit(s, W * 0.86, H * 0.98, PLUS.cx + 8 * u, PLUS.cy + 10 * u, PLUS.cx + 80 * u, PLUS.cy + 75 * u, 0.4, 0.36, 0.5, 0.5);
+        }
+        chainOn = true;
+    } else if (t >= T.t6 && t < T.s7) {
+        // the button splits into four, which take on colour
+        const k = easeInOut(at("t6", t) / 0.7);
+        rects = [0, 1, 2, 3].map((i) => mixRect(plusRect(0), rowRect(i), k));
+        chainOn = t < T.t6 + D.t6 * 0.45;
+        show(plusIcon, PLUS.cx, PLUS.cy, 1 - k * 3);
+    }
+    if (rects) links.forEach((m, i) => m.set(rects[i]));
+    presence(chain, chainOn, t, T.t6 + D.t6 * 0.45, 0.3);
+    chain.press(pressed);
+    presence(selector, selectorOn, t, T.t5 + 0.08, 0.3);
+
+    // ---- tinted buttons; pressing one brings up the sheet, which has small glass of its own
+    {
+        const colours = [[0.86, 0.18, 0.86, 1], [0.12, 0.45, 1, 1], [0.15, 0.72, 0.36, 1], [1, 0.55, 0.12, 1]];
+        const on = t >= T.t6 + D.t6 * 0.4 && t < TINTS_GONE;
+        tints.forEach((tn, i) => {
+            tn.set({ tint: colours[i], ...rowRect(i) });
+            presence(tn, on, t, TINTS_GONE, 0.25);
+            if (t >= T.t6 && t < TINTS_GONE + 0.2)
+                show(tintIcons[i], ROW.x0 + i * (ROW.d + ROW.gap) + ROW.d / 2, ROW.y, t < T.s7 ? (at("t6", t) - 0.55) / 0.3 : 1 - (t - TINTS_GONE) / 0.2);
+        });
+        let down = false;
+        if (t >= T.s7 && t < T.t7 + 0.3) down = visit(t - T.s7, W * 0.12, H * 1.02, ROW.x0 + ROW.d / 2 + 10 * u, ROW.y + 14 * u, W * 0.05, H * 1.12, 0.45, 0.5, 0.68, 0.25);
+        tints[0].press(down);
+        // the back button, and the pair: two buttons that run together into one drop, which rises to the middle of the
+        // screen and grows (sizes in the glass's own pixels; the camera does the rest)
+        const navOn = t >= NAV_FROM && t < NAV_GONE, fadeIn = Math.min((t - NAV_FROM) / 0.3, 1 - (t - NAV_GONE) / 0.25);
+        back.set({ x: NAV.xs[0], y: NAV.y, width: NAV.d, height: NAV.d });
+        presence(back, navOn, t, NAV_GONE, 0.25);
+        if (t >= NAV_FROM && t < NAV_GONE + 0.25) {
+            show(navIcons[0], NAV.xs[0] + NAV.d / 2, NAV.y + NAV.d / 2, fadeIn);
+            navIcons[0].style.color = back.shownScheme === "light" ? "#111" : "#fff";
+        }
+        const cy = NAV.y + NAV.d / 2, c1 = NAV.xs[1] + NAV.d / 2, c2 = NAV.xs[2] + NAV.d / 2, mid = (c1 + c2) / 2, s = t - T.s8;
+        let rects, spacing = 0, iconAlpha = 0, x1 = c1, x2 = c2;
+        if (t < T.s8 + S8.merge) {
+            rects = [circle(c1, cy, NAV.d), circle(c2, cy, NAV.d)];
+            iconAlpha = t >= NAV_FROM ? fadeIn : 0;
+        } else if (t < T.s8 + S8.float) {
+            // they pull towards each other faster and faster, a neck forms between them, and the drop wobbles as it settles
+            const p = (s - S8.merge) / (S8.float - S8.merge), a = Math.pow(clamp01(p / 0.5), 2);
+            const dd = lerp(NAV.d, DROP.d, a), q = clamp01((p - 0.5) / 0.5), wob = p < 0.5 ? 0 : 0.2 * Math.exp(-4 * q) * Math.sin(10 * q);
+            const w = dd * (1 - wob), h = dd * (1 + wob);
+            x1 = lerp(c1, mid, a); x2 = lerp(c2, mid, a);
+            rects = [rect(x1 - w / 2, cy - h / 2, w, h, Math.min(w, h) / 2), rect(x2 - w / 2, cy - h / 2, w, h, Math.min(w, h) / 2)];
+            spacing = 30 * u * clamp01(p / 0.25);
+            iconAlpha = 1 - clamp01(p / 0.3);
+        } else {
+            // the frosted drop rises with the clear one that takes over from it, and fades; it keeps the light look it
+            // took over the white card (hidden glass would fall back to the dark look of the page)
+            const drop = dropAt(t);
+            rects = [drop, drop];
+            spacing = 30 * u;
+        }
+        pair.set({ appearance: t < T.s8 + S8.float ? "dark" : "light" });
+        pairLinks.forEach((m, i) => m.set(rects[i]));
+        pair.set({ spacing });
+        presence(pair, t >= NAV_FROM && t < FLOW_FROM, t, FLOW_FROM, 0.35);
+        if (iconAlpha > 0) [x1, x2].forEach((x, i) => {
+            show(navIcons[i + 1], x, cy, iconAlpha);
+            navIcons[i + 1].style.color = pair.shownScheme === "light" ? "#111" : "#fff";
+        });
+    }
+
+    // ---- clear glass: the drop that rises to the middle, lands on the grid as the sheet leaves, slowly draws out a pill
+    // that stays joined to it by a neck, with a knob in it, and then gathers with it into the lens of the first shot
+    {
+        const on = t >= FLOW_FROM && t < T.t9 + D.t9 * 0.45, cy = FLOW.cy, P = FLOW.pill;
+        presence(flow, on, t, T.t9 + D.t9 * 0.45, 0.22);
+        presence(knob, t >= T.s9 + D.s9 * 0.55 && t < T.t9 + 0.1, t, T.t9 + 0.1, 0.2);
+        const p = clamp01(at("s9", t)), e = easeInOut(p / 0.85), g = easeInOut(at("t9", t) / 0.55);
+        const end = circle(LENS_START.x, LENS_START.y, LENS_D), kw = 104 * u, kh = P.h - 30 * u;
+        if (t >= T.s8 && t < T.s9) {
+            const drop = dropAt(t), [dx, dy] = centre(drop);
+            blob.set(drop);
+            long.set(circle(dx, dy, 10 * u));
+        } else {
+            blob.set(mixRect(circle(lerp(W / 2, W / 2 + 40 * u, e), cy, lerp(DROP.end, 236 * u, e)), end, g));
+            long.set(mixRect(mixRect(circle(W / 2, cy, 10 * u), rect(P.x, cy - P.h / 2, P.w, P.h, P.h / 2), e), end, g));
+        }
+        knob.set(mixRect(rect(P.x + 14 * u + 30 * u * easeInOut((p - 0.62) / 0.38), cy - kh / 2, kw, kh, kh * 0.32), end, g));
+    }
+}
+
+window.frame = (time) => {
+    const t = ((time % TOTAL) + TOTAL) % TOTAL;
+    frameAt(t);
+    // the engine's clock runs on from the pre-roll
+    pump((time + 60) * 1000);
+    return t;
+};
+// play the end of the loop first, at the rate it is recorded (?fps=), so the first recorded frame continues it
+const FPS = Number(new URLSearchParams(location.search).get("fps")) || 20;
+for (let i = -3 * FPS; i < 0; i++) window.frame(i / FPS);
+window.__showcase = { glass, items: [lens, ...newspaperMaterials, clock, chain, selector, ...tints, back, pair, flow, knob], newspaper: { names: newspaperMaterialNames, items: newspaperMaterials } };
+window.__ready = true;
+if (!new URLSearchParams(location.search).has("record")) {
+    let start = null;
+    const play = now => { if (start === null) start = now; window.frame((now - start) / 1000); realFrame(play); };
+    realFrame(play);
+}
+</script>
+</body>
+</html>

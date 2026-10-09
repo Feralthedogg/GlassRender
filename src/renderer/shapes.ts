@@ -1,24 +1,66 @@
-// Shapes: the material rows (presets at the current scheme, presence and surroundings; custom descriptions), the shape
-// rows, the program of the feature key and the backdrop region a slot asks for.
+/**
+ * @file shapes.ts
+ * @brief Per-shape material, geometry and backdrop region resolution.
+ */
+
 import {
-    CORNER_SMOOTH, FEATURE_FADE, FEATURE_FIELD, FEATURE_ROUND_NORMAL, FEATURE_SHARP, FEATURE_UNEVEN, FEATURE_VEIL,
-    MATERIAL_FLOATS, MAX_MEMBERS, MEMBER_BOX, MEMBER_FIELD, MEMBER_SHIFT, MEMBER_UNEVEN, SMOOTH_REACH
+    CORNER_SMOOTH, FEATURE_ABERRATION, FEATURE_FADE, FEATURE_FIELD, FEATURE_LENS, FEATURE_LIGHTS, FEATURE_ROUND_NORMAL, FEATURE_SHARP, FEATURE_TINT, FEATURE_UNEVEN, FEATURE_VEIL,
+    MATERIAL_FLOATS, MAX_MEMBERS, MEMBER_BOX, MEMBER_FIELD, MEMBER_SHIFT, MEMBER_UNEVEN, ROW_CLAMP, ROW_GRID, ROW_LENS_LAYER, ROW_TINT_MORE, SMOOTH_REACH
 } from "../layout.js";
-import { glassFragment, SHAPE_VERTEX } from "../kernels.js";
-import { ADAPTIVE_SIDE, backdropRegion, type MaterialSpec, packMaterial, packTint } from "../material.js";
-import { packPreset, presetFollows } from "../preset.js";
+import { glassFragment, groupBodyFragment, shapeVertex, worldVertex } from "../kernels.js";
+import { ADAPTIVE_SIDE, backdropRegion, packTint } from "../material.js";
+import { packPreset, PRESET_CLEAR, PRESET_RANGE, presetFollows } from "../preset.js";
 import {
-    A, ADAPT_FIRST, ADAPT_LIVE, ADAPT_OFF, B, C, edge, F, G, GEN_MASK, GEN_SHIFT, GEOM_BOX, GEOM_FIELD, GEOM_UNEVEN, GEOM_UNION,
-    MATERIAL_CUSTOM, MATERIAL_DARK, MAXL, MB, MF, MMF, R
+    A, ADAPT_FIRST, ADAPT_LIVE, ADAPT_OFF, B, C, edge, F, FIELD_BITS, FIELD_RANGE, G, GEN_MASK, GEN_SHIFT, GEOM_BOX, GEOM_FIELD, GEOM_UNEVEN, GEOM_UNION,
+    MATERIAL_DARK, MAXL, MB, MF, MMF, R
 } from "./lanes.js";
 import { link } from "./shared.js";
+import { fma32, layerOpacity } from "../precision.js";
+import { vibrantClamp } from "../hdr.js";
+import { tintGradientMask } from "../gradient.js";
 import { State } from "./state.js";
 
-// scratch of the region helper: capture x y w h, region x y w h, levels, low level
+// Region scratch: capture and pyramid rectangles, level count and first level.
 const REGION = new Int32Array(10);
 
-/** Material and geometry rows of a slot, and its program. */
+/** @brief Material and geometry rows of a slot, and its program. */
 export abstract class Shapes extends State {
+    private tintMask: WebGLTexture | null = null;
+
+    protected dropTintMask(deleteObjects: boolean): void {
+        if (deleteObjects) this.gl.deleteTexture(this.tintMask);
+        this.tintMask = null;
+    }
+
+    /** One immutable distance LUT, recreated lazily after context restoration. */
+    protected bindTintMask(): boolean {
+        const gl = this.gl;
+        gl.activeTexture(gl.TEXTURE7);
+        if (this.tintMask === null) {
+            const texture = gl.createTexture();
+            if (texture === null) { gl.activeTexture(gl.TEXTURE0); return false; }
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA16F, 256, 1);
+            // Typed uploads must not inherit the caller's pixel-unpack buffer or row skips.
+            const unpack = gl.getParameter(gl.PIXEL_UNPACK_BUFFER_BINDING) as WebGLBuffer | null;
+            const names = [gl.UNPACK_ROW_LENGTH, gl.UNPACK_SKIP_PIXELS, gl.UNPACK_SKIP_ROWS] as const;
+            const values = names.map(name => gl.getParameter(name) as number);
+            gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, null);
+            for (const name of names) gl.pixelStorei(name, 0);
+            try { gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, 1, gl.RGBA, gl.FLOAT, tintGradientMask()); }
+            finally {
+                names.forEach((name, i) => gl.pixelStorei(name, values[i] as number));
+                gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, unpack);
+            }
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            this.tintMask = texture;
+        } else gl.bindTexture(gl.TEXTURE_2D, this.tintMask);
+        gl.activeTexture(gl.TEXTURE0);
+        return true;
+    }
     // Start a slot as a new shape; returns its handle (a new generation, so handles of earlier users of the slot are dead).
     protected init(slot: number, kind: number, geom: number): number {
         const gen = (((this.gens[slot] as number) + 1) & GEN_MASK) || 1, a = this.ad, b = slot * A;
@@ -27,6 +69,7 @@ export abstract class Shapes extends State {
         this.st[slot] = ADAPT_OFF;
         this.fixedTone[slot] = 0;
         this.presets[slot] = 0;
+        this.chromatic[slot] = -1;
         this.lumaDirty[slot] = 0;
         this.feats[slot] = 0;
         this.gens[slot] = gen;
@@ -63,22 +106,8 @@ export abstract class Shapes extends State {
             const w = (g[b + 2] as number) + 2 * e, h = (g[b + 3] as number) + 2 * e;
             g[b + 17] = g[b + 18] = w < h ? w : h;
         }
-        if (this.kinds[slot] !== MATERIAL_CUSTOM) this.packTone(slot);
-        else if (this.packed[slot] !== this.ad[slot * A + 8]) this.packCustom(slot);
+        this.packTone(slot);
         this.finish(slot);
-    }
-
-    // Material rows of a custom material at the current presence, with its tint.
-    protected packCustom(slot: number): void {
-        const sp = this.specs[slot] as MaterialSpec | null, o = slot * this.stride, pr = this.ad[slot * A + 8] as number;
-        if (sp === null) return;
-        let f = packMaterial(this.blocks, o, this.geo, slot * G + 6, sp, pr, this.share, this.scale);
-        if (f < 0) return;
-        const t = this.tints, tb = slot * 4;
-        f |= packTint(this.blocks, o, t[tb] as number, t[tb + 1] as number, t[tb + 2] as number, (t[tb + 3] as number) * pr, 0);
-        this.feats[slot] = f;
-        this.packed[slot] = pr;
-        this.touch(slot);
     }
 
     // Material rows of a preset for the current adaptive state: small glass of a preset that follows the backdrop takes
@@ -94,8 +123,17 @@ export abstract class Shapes extends State {
         } else this.st[slot] = ADAPT_OFF;
         const pr = a[ab + 8] as number;
         let f = packPreset(this.blocks, o, g, b + 6, P, side, g[b + 18] as number, mix, pr, this.env, this.share, this.scale);
+        const value = this.chromatic[slot] as number, strength = value < 0 ? this.chromaticDefault : value;
+        if (strength !== 1 && (f & (FEATURE_ABERRATION | FEATURE_LENS)) !== 0) {
+            // Scale fresh packed rows so cache hits and repeated updates never compound the multiplier.
+            if ((f & FEATURE_ABERRATION) !== 0) this.blocks[o + ROW_CLAMP * 4 + 2] = (this.blocks[o + ROW_CLAMP * 4 + 2] as number) * strength;
+            if ((f & FEATURE_LENS) !== 0) this.blocks[o + ROW_LENS_LAYER * 4] = (this.blocks[o + ROW_LENS_LAYER * 4] as number) * strength;
+            if (strength === 0) f &= ~(FEATURE_ABERRATION | FEATURE_LENS);
+        }
+        g[b + 22] = PRESET_RANGE[0] as number; g[b + 23] = PRESET_RANGE[1] as number;
         const t = this.tints, tb = slot * 4;
         f |= packTint(this.blocks, o, t[tb] as number, t[tb + 1] as number, t[tb + 2] as number, (t[tb + 3] as number) * pr, mix);
+        if ((f & FEATURE_TINT) !== 0) this.blocks[o + ROW_TINT_MORE * 4] = vibrantClamp(this.blocks[o + ROW_TINT_MORE * 4] as number);
         this.feats[slot] = f;
         this.touch(slot);
     }
@@ -103,15 +141,17 @@ export abstract class Shapes extends State {
     // Shape rows, program and region demand of a slot.
     protected finish(slot: number): void {
         const g = this.geo, b = slot * G, d = this.blocks, o = slot * this.stride + MATERIAL_FLOATS;
-        const veil = g[b + 20] as number, fade = g[b + 21] as number;
+        const veil = g[b + 20] as number, fade = layerOpacity(g[b + 21] as number);
         let bits = this.packGeometry(slot);
         let p: WebGLProgram | null = null, key = -1;
         d[o + 36] = g[b + 19] as number; d[o + 37] = veil; d[o + 38] = fade;
-        if (bits >= 0) {
+        if (bits >= 0 && fade > 0) {
             if (veil > 0) bits |= FEATURE_VEIL;
             if (fade < 1) bits |= FEATURE_FADE;
-            // a mask field keeps its own direction: the ellipse mix applies to analytic outlines only (a union applies it
-            // member by member)
+            /*
+             * Mask fields retain their own direction. Ellipse blending applies to analytic
+             * outlines; unions select it independently for each member.
+             */
             const f = this.feats[slot] as number;
             key = bits | ((bits & FEATURE_FIELD) !== 0 && (bits >>> MEMBER_SHIFT) === 0 ? f & ~FEATURE_ROUND_NORMAL : f);
             p = this.program(key);
@@ -148,8 +188,8 @@ export abstract class Shapes extends State {
                 kx = (E - hx / r) / (E - 1); kx = kx < 0 ? 0 : kx > 1 ? 1 : kx;
                 ky = (E - hy / r) / (E - 1); ky = ky < 0 ? 0 : ky > 1 ? 1 : ky;
             }
-            const e0 = E * r;
-            d[o + 4] = r; d[o + 5] = e0; d[o + 6] = e0 + (r - e0) * (kx > ky ? kx : ky);
+            const e0 = Math.fround(Math.fround(E) * Math.fround(r));
+            d[o + 4] = r; d[o + 5] = e0; d[o + 6] = e0 + Math.fround(r - e0) * (kx > ky ? kx : ky);
             d[o + 8] = kx; d[o + 9] = ky;
             if (r <= 0) bits = FEATURE_SHARP;
         } else if (geom === GEOM_UNEVEN) {
@@ -166,11 +206,22 @@ export abstract class Shapes extends State {
             d[o + 34] = edge(hy, (tr + br) * 0.5, smooth); d[o + 35] = edge(hy, (tl + bl) * 0.5, smooth);
             bits = FEATURE_UNEVEN;
         } else if (geom === GEOM_FIELD) {
-            // field texture: the frame grown by the reach of the shadow lookups, at device resolution, centred
+            // field texture: the frame grown by the reach of the shadow lookups, at device resolution, centered
             const ax = g[b + 10] as number, ay = g[b + 11] as number;
-            const pad = (g[b + 6] as number) + ((ax < 0 ? -ax : ax) > (ay < 0 ? -ay : ay) ? (ax < 0 ? -ax : ax) : (ay < 0 ? -ay : ay)) + 2;
+            const offset = Math.max(Math.abs(ax), Math.abs(ay)), upper = g[b + 23] as number;
+            const pad = Math.max(9 / s, Number.isFinite(upper)
+                ? Math.max(Math.fround(upper + (this.presets[slot] === PRESET_CLEAR ? 0 : 8)), offset + 2)
+                : (g[b + 6] as number) + offset + 2);
             const fw = Math.ceil((w + 2 * pad) * s), fh = Math.ceil((h + 2 * pad) * s), fd = this.fdim, f = slot * F;
             if (fw > this.maxTex || fh > this.maxTex || !(w > 0) || !(h > 0)) return -1;
+            // Default ranges use half storage at spans of at least 32 points and packed storage below it.
+            const lower = g[b + 22] as number;
+            const encoded = Number.isFinite(lower) && Number.isFinite(upper) && lower < 0 && upper > 0;
+            FIELD_RANGE[0] = encoded ? lower : 0; FIELD_RANGE[1] = encoded ? upper : 0;
+            if (fd[f + 6] !== FIELD_BITS[0] || fd[f + 7] !== FIELD_BITS[1]) {
+                fd[f + 2] = 0; fd[f + 3] = 0;
+                fd[f + 6] = FIELD_BITS[0] as number; fd[f + 7] = FIELD_BITS[1] as number;
+            }
             fd[f] = fw; fd[f + 1] = fh;
             if (fd[f + 2] !== fw || fd[f + 3] !== fh) this.maskDirty = true;
             d[o + 28] = s / fw; d[o + 29] = s / fh; d[o + 30] = 0.5; d[o + 31] = 0.5;
@@ -181,7 +232,9 @@ export abstract class Shapes extends State {
             const m = this.members, mo = slot * MAX_MEMBERS * MB, u = this.ublocks, uo = slot * this.ustride, sp = g[b + 16] as number;
             // a mask member's field reaches as far as the shadow lookups and the merge distance
             const ax = g[b + 10] as number, ay = g[b + 11] as number, aa = (ax < 0 ? -ax : ax) > (ay < 0 ? -ay : ay) ? (ax < 0 ? -ax : ax) : (ay < 0 ? -ay : ay);
-            let fp = (g[b + 6] as number) + aa + 2; if (fp < sp + 2) fp = sp + 2;
+            const upper = g[b + 23] as number;
+            let fp = Math.max(9 / s, Number.isFinite(upper) ? Math.max(Math.fround(upper + sp), aa + 2) : (g[b + 6] as number) + aa + 2);
+            if (fp < sp + 2) fp = sp + 2;
             bits = n << MEMBER_SHIFT;
             for (let i = 0; i < n; i++) {
                 const q = mo + i * MB, v = uo + i * MF, kind = m[q + 6] as number, ee = kind === MEMBER_FIELD ? 0 : em;
@@ -198,8 +251,8 @@ export abstract class Shapes extends State {
                         kx = (E - mw / r) / (E - 1); kx = kx < 0 ? 0 : kx > 1 ? 1 : kx;
                         ky = (E - mh / r) / (E - 1); ky = ky < 0 ? 0 : ky > 1 ? 1 : ky;
                     }
-                    const e0 = E * r;
-                    u[v + 4] = r; u[v + 5] = e0; u[v + 6] = e0 + (r - e0) * (kx > ky ? kx : ky); u[v + 8] = kx; u[v + 9] = ky;
+                    const e0 = Math.fround(Math.fround(E) * Math.fround(r));
+                    u[v + 4] = r; u[v + 5] = e0; u[v + 6] = e0 + Math.fround(r - e0) * (kx > ky ? kx : ky); u[v + 8] = kx; u[v + 9] = ky;
                 } else if (kind === MEMBER_UNEVEN) {
                     let tl = m[q + 8] as number, tr = m[q + 9] as number, br = m[q + 10] as number, bl = m[q + 11] as number, k = 1;
                     const ww = 2 * mw, hh = 2 * mh;
@@ -241,6 +294,30 @@ export abstract class Shapes extends State {
             (d[mo + 165] as number) > 0, W, Hh, MAXL);
         const cx0 = R9[0] as number, cy0 = R9[1] as number, cw = R9[2] as number, ch = R9[3] as number, cx1 = cx0 + cw, cy1 = cy0 + ch;
         const rx0 = R9[4] as number, ry0 = R9[5] as number, pw = R9[6] as number, ph = R9[7] as number, levels = R9[8] as number;
+        if (geom === GEOM_BOX) {
+            const at = mo + ROW_GRID * 4, fr = Math.fround;
+            const outline = Math.max(1 / s, -(d[slot * this.stride + 95] as number) * s);
+            /*
+             * Partition in Float64 before Float32 rounding. The fragment path uses Float32;
+             * changing this order shifts grid boundaries at rounded corners.
+             */
+            const corner = fr(fr(d[o + 4] as number) * E);
+            for (let axis = 0; axis < 2; axis++) {
+                const half = axis === 0 ? hx : hy, centre = axis === 0 ? cx : cy;
+                const offset = axis === 0 ? ox : -oy;
+                const low = -half + Math.min(-outline, -sp + offset), high = half + Math.max(outline, sp + offset);
+                const origin = axis === 0 ? rx0 : ry0, size = axis === 0 ? pw : ph;
+                const coefficient = fr((axis === 0 ? 2 / W : -2 / Hh));
+                for (let i = 0; i < 6; i++) {
+                    const q = i === 0 ? low : i === 1 ? -half - outline : i === 2 ? -half + Math.min(corner, half)
+                        : i === 3 ? half - Math.min(corner, half) : i === 4 ? half + outline : high;
+                    const pixel = fr((q + centre) * s), clip = fr(fr(pixel * coefficient) + (axis === 0 ? -1 : 1));
+                    d[at + axis * 6 + i] = axis === 0 ? clip : -clip;
+                    d[at + 12 + axis * 6 + i] = fr(q);
+                    d[at + 24 + axis * 6 + i] = fr(fma32(pixel, fr(1 / T), -fr(origin)) * fr(1 / size));
+                }
+            }
+        }
         d[o + 11] = levels - 1;
         d[o + 24] = T; d[o + 25] = pw / ph; d[o + 27] = R9[9] as number;
         // capture lanes: origin px (y up), texel px, position of the region's first texel in the capture, capture size
@@ -260,22 +337,49 @@ export abstract class Shapes extends State {
         return bits;
     }
 
+    protected separateRim(key: number): boolean {
+        return this.extended && (key & FEATURE_LIGHTS) !== 0 && ((key & (FEATURE_FADE | FEATURE_VEIL)) === 0 || this.groupLayer(key));
+    }
+
+    protected groupLayer(key: number): boolean {
+        return this.extended && (key & (FEATURE_LIGHTS | FEATURE_FADE)) === (FEATURE_LIGHTS | FEATURE_FADE)
+            && (key & (FEATURE_LENS | FEATURE_VEIL)) === 0
+            && ((key & FEATURE_TINT) === 0 || ((key >>> MEMBER_SHIFT) === 0 && (key & (FEATURE_FIELD | FEATURE_UNEVEN)) === 0));
+    }
+
+    protected separateTint(key: number): boolean {
+        return this.extended && (key & FEATURE_TINT) !== 0 && (key >>> MEMBER_SHIFT) === 0
+            && (key & (FEATURE_FIELD | FEATURE_UNEVEN | FEATURE_LENS | FEATURE_VEIL)) === 0
+            && ((key & FEATURE_FADE) === 0 || this.groupLayer(key));
+    }
+
     protected program(key: number): WebGLProgram | null {
-        const have = this.programs.get(key);
+        const edr = this.frame[14] !== 1, hdr = this.frame[15] !== 0, blend = this.extended;
+        const cacheKey = key * 8 + (edr ? 1 : 0) + (hdr ? 2 : 0) + (blend ? 4 : 0);
+        const have = this.programs.get(cacheKey);
         if (have !== undefined) return have;
-        const gl = this.gl, p = link(gl, SHAPE_VERTEX, glassFragment(key));
+        const grid = (key >>> MEMBER_SHIFT) === 0 && (key & (FEATURE_FIELD | FEATURE_UNEVEN)) === 0;
+        const gl = this.gl;
+        let bodyKey = this.separateRim(key) ? key & ~FEATURE_LIGHTS : key;
+        if (this.separateTint(key)) bodyKey &= ~FEATURE_TINT;
+        // Keep the measured reflected-vertex context of the normalized HDR profile.
+        const world = blend && grid && !hdr;
+        const p = link(gl, world ? worldVertex() : shapeVertex(grid, blend), this.groupLayer(key) ? groupBodyFragment(bodyKey, edr, hdr, world) : glassFragment(bodyKey, edr, hdr, blend, blend, world));
         if (p === null) return null;
         gl.uniformBlockBinding(p, gl.getUniformBlockIndex(p, "M"), 0);
         gl.uniformBlockBinding(p, gl.getUniformBlockIndex(p, "F"), 1);
         if ((key >>> MEMBER_SHIFT) !== 0) gl.uniformBlockBinding(p, gl.getUniformBlockIndex(p, "U"), 2);
         gl.useProgram(p);
+        gl.uniform1ui(gl.getUniformLocation(p, "uHalfBarrier"), 0);
         gl.uniform1i(gl.getUniformLocation(p, "uP"), 0);
         gl.uniform1i(gl.getUniformLocation(p, "uB"), 1);
+        if ((key & FEATURE_TINT) !== 0) gl.uniform1i(gl.getUniformLocation(p, "uTintMask"), 7);
+        if (blend) gl.uniform1i(gl.getUniformLocation(p, "uD"), 6);
         if ((key & FEATURE_FIELD) !== 0) {
             if ((key >>> MEMBER_SHIFT) === 0) gl.uniform1i(gl.getUniformLocation(p, "uF"), 2);
             else for (let k = 0; k < MMF; k++) gl.uniform1i(gl.getUniformLocation(p, "uF" + k), 2 + k);
         }
-        this.programs.set(key, p);
+        this.programs.set(cacheKey, p);
         return p;
     }
 }

@@ -1,4 +1,9 @@
-// Lanes of the renderer state: one typed array per kind of value, a fixed number of lanes per slot.
+/**
+ * @file lanes.ts
+ * @brief Typed-array lane layouts for renderer slots.
+ * @details Each slot uses fixed offsets so frame traversal does not allocate per-shape objects.
+ */
+
 import { MAX_MEMBER_FIELDS, MEMBER_ROWS, SMOOTH_REACH } from "../layout.js";
 
 // Geometry lanes per slot: x y w h radius corner | shadow spread, largest lookup radius, margin, backdrop scale, shadow offset.
@@ -24,13 +29,14 @@ export const MB = 12;
 export const MF = MEMBER_ROWS * 4;
 // Mask members of a union: field storage index is slot * MMF + field index.
 export const MMF = MAX_MEMBER_FIELDS;
-// Field lanes per slot: wanted size, built size, and mask size in pixels.
-export const F = 6;
+// Field lanes per slot: wanted size, built size, mask size, and the encoding range as Float bits.
+export const F = 8;
+export const FIELD_RANGE = new Float32Array(2), FIELD_BITS = new Int32Array(FIELD_RANGE.buffer);
 export const MAXL = 12;
 export const MAXP = 8;
 export const INST = 12;
 // Material kinds: 0 free; a preset (its number in the presets lane) for dark or light surroundings, or a description.
-export const MATERIAL_DARK = 1, MATERIAL_LIGHT = 2, MATERIAL_CUSTOM = 3;
+export const MATERIAL_DARK = 1, MATERIAL_LIGHT = 2;
 export const GEOM_BOX = 0, GEOM_UNEVEN = 1, GEOM_UNION = 2, GEOM_FIELD = 3;
 export const ADAPT_OFF = 0, ADAPT_FIRST = 1, ADAPT_LIVE = 2;
 export const FLAG_READS = 1, FLAG_READ = 2;

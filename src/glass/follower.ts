@@ -1,11 +1,22 @@
-/** @internal An element whose box gives the frame of a shape or a group member. */
+/**
+ * @file follower.ts
+ * @brief DOM bounds tracking for shapes and group members.
+ */
+
+/**
+ * @brief An element whose box gives the frame of a shape or a group member.
+ * @internal
+ */
 export interface Follower {
     element: Element | null;
     everyFrame: boolean;
     place(x: number, y: number, w: number, h: number): void;
 }
 
-/** @internal The followers of one glass with their observers. */
+/**
+ * @brief The followers of one glass with their observers.
+ * @internal
+ */
 export class Followers {
     private readonly list: Follower[];
     private readonly onMove: () => void;
@@ -20,12 +31,12 @@ export class Followers {
         this.moving = 0;
     }
 
-    /** Number of followers. */
+    /** @brief Number of followers. */
     get size(): number {
         return this.list.length;
     }
 
-    /** Some follower wants to be measured on every frame. */
+    /** @brief Some follower wants to be measured on every frame. */
     get everyFrame(): boolean {
         return this.moving > 0;
     }
@@ -52,7 +63,10 @@ export class Followers {
         if (this.list.length === 0) this.unlisten();
     }
 
-    /** Place every follower by the box of its element, relative to the content box of the canvas. */
+    /**
+     * @brief Place every follower by the box of its element, relative to the content box of the
+     * canvas.
+     */
     measure(canvas: HTMLCanvasElement): void {
         const fs = this.list, c = canvas.getBoundingClientRect(), ox = c.left + canvas.clientLeft, oy = c.top + canvas.clientTop;
         for (let i = 0; i < fs.length; i++) {
@@ -63,7 +77,7 @@ export class Followers {
         }
     }
 
-    /** Drop every follower, observer and listener. */
+    /** @brief Drop every follower, observer and listener. */
     release(): void {
         if (this.observer !== null) { this.observer.disconnect(); this.observer = null; }
         if (this.list.length > 0) this.unlisten();

@@ -1,24 +1,34 @@
+/**
+ * @file environment.ts
+ * @brief Device preferences and foreground colors for material surroundings.
+ */
+
 import {
     ENV_BUTTON_SHAPES, ENV_INACTIVE, ENV_INCREASE_CONTRAST, ENV_REDUCE_MOTION, ENV_REDUCE_TRANSPARENCY, ENV_TINTED, SCHEME_DARK,
     type Scheme
 } from "../layout.js";
 import type { EnvironmentOptions, Follow, Foreground } from "./types.js";
 
-// Foreground colours for ordinary content and control titles on dark, light, and accent-tinted glass.
+// Foreground colors for ordinary content and control titles on dark and light glass.
 const DARK: Foreground = { text: "rgba(255, 255, 255, 0.898)", title: "rgba(255, 255, 255, 0.95)" };
 const LIGHT: Foreground = { text: "rgba(0, 0, 0, 0.847)", title: "rgb(0, 0, 0)" };
-const ACCENT: Foreground = { text: "rgb(255, 255, 255)", title: "rgb(255, 255, 255)" };
 
-/** @internal Colours for content on glass of a scheme. */
-export function foregroundOf(scheme: Scheme, prominent: boolean): Foreground {
-    return prominent ? ACCENT : scheme === SCHEME_DARK ? DARK : LIGHT;
+/**
+ * @brief Colors for content on glass of a scheme.
+ * @internal
+ */
+export function foregroundOf(scheme: Scheme): Foreground {
+    return scheme === SCHEME_DARK ? DARK : LIGHT;
 }
 
 function query(text: string): MediaQueryList | null {
     return typeof matchMedia === "function" ? matchMedia(text) : null;
 }
 
-/** @internal Media queries and page focus behind the "auto" settings. */
+/**
+ * @brief Media queries and page focus behind the "auto" settings.
+ * @internal
+ */
 export class Surroundings {
     private readonly darkQuery: MediaQueryList | null;
     private readonly opaqueQuery: MediaQueryList | null;
@@ -43,17 +53,19 @@ export class Surroundings {
         if (this.rangeQuery !== null) this.rangeQuery.addEventListener("change", onChange);
     }
 
-    /** The page prefers a dark colour scheme (true where that cannot be asked). */
+    /** @brief The page prefers a dark color scheme (true where that cannot be asked). */
     get dark(): boolean {
         return this.darkQuery === null || this.darkQuery.matches;
     }
 
-    /** The screen shows values above the standard white. */
+    /** @brief The screen shows values above the standard white. */
     get highRange(): boolean {
         return this.rangeQuery !== null && this.rangeQuery.matches;
     }
 
-    /** `ENV_*` bits for the options, with "auto" resolved from the device and the page. */
+    /**
+     * @brief `ENV_*` bits for the options, with "auto" resolved from the device and the page.
+     */
     bits(o: EnvironmentOptions): number {
         const active = o.active ?? true;
         this.watchFocus(active === "auto");
@@ -64,7 +76,7 @@ export class Surroundings {
             | (this.follow(o.reduceMotion, this.motionQuery) ? ENV_REDUCE_MOTION : 0) | (o.buttonShapes === true ? ENV_BUTTON_SHAPES : 0);
     }
 
-    /** Drop every listener. */
+    /** @brief Drop every listener. */
     release(): void {
         const f = this.onChange;
         if (this.darkQuery !== null) this.darkQuery.removeEventListener("change", f);

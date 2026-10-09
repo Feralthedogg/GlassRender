@@ -1,174 +1,231 @@
-// Option types of the convenience layer.
+/**
+ * @file types.ts
+ * @brief Public canvas, geometry and material option contracts.
+ */
+
 import { CORNER_CIRCULAR, CORNER_SMOOTH, type CornerKind } from "../layout.js";
-import type { MaterialSpec, Rgb, Rgba } from "../material.js";
+import type { Rgba } from "../material.js";
 import type { PRESET_NAMES } from "../presets.js";
 
-/** Surroundings a material is tuned for; "auto" follows the colour scheme the page prefers. */
-export type Appearance = "dark" | "light" | "auto";
 /**
- * Built-in material. "standard" is frosted glass and "clear" glass with little blur and no shadow; "prominent" is
- * standard glass tinted at full strength with the accent colour (or with `tint`), the look of a primary control. The
- * others are the materials of particular surfaces and controls, each with its own laws over the size and the
- * surroundings: "menu", "popover", "notification", "sidebar", "attachedSidebar", "inspector", "dock", "controlPanel",
- * "keyboard", "widget", "icon", "player" and "call" (clear glass over video), "camera", "bubble", "text" (fields),
- * "assistant", "assistantCard", "focusRing", "focusBackground", "vehicle", "control", "slider" and "loupe" (lenses of
- * controls; "control" and "loupe" draw colour fringes), "monogram" (a lens with bright lights only) and "identity"
- * (no effect at all).
+ * @brief Color scheme used to resolve a material.
+ * @details "auto" follows the page's preferred color scheme.
  */
-export type Preset = (typeof PRESET_NAMES)[number] | "prominent";
-/** Corner construction: "smooth" (curvature eases into the edges) or "circular" arcs. */
+export type Appearance = "dark" | "light" | "auto";
+/** @brief A built-in material preset. */
+export type Preset = (typeof PRESET_NAMES)[number];
+/** @brief Corner construction: "smooth" (curvature eases into the edges) or "circular" arcs. */
 export type CornerStyle = "smooth" | "circular";
-/** How a shape appears, disappears and leaves: "materialize" blends it in over half a second, "none" switches at once. */
+/**
+ * @brief Visibility and removal transition.
+ * @details "materialize" blends the shape over half a second; "none" switches immediately.
+ */
 export type Transition = "materialize" | "none";
-/** How a backdrop of another size is laid on the canvas. */
+/** @brief How a backdrop of another size is laid on the canvas. */
 export type Fit = "cover" | "contain" | "stretch";
-/** "exact": glass over glass refracts the glass below it; "flat": every shape refracts the backdrop only (cheaper). */
+/**
+ * @brief Backdrop source used when glass shapes overlap.
+ * @details "exact" includes previously drawn glass; "flat" samples only the backdrop and costs less.
+ */
 export type StackingMode = "exact" | "flat";
-/** A setting that is on, off, or follows what the person set on their device ("auto"). */
+/**
+ * @brief Explicit setting or device preference selected with "auto".
+ */
 export type Follow = boolean | "auto";
-/** One corner radius, or four (top-left, top-right, bottom-right, bottom-left). */
+/** @brief One corner radius, or four (top-left, top-right, bottom-right, bottom-left). */
 export type Radius = number | readonly [number, number, number, number];
-/** The scheme a glass shows: small adaptive glass turns light over a bright backdrop and dark over a dark one. */
+/**
+ * @brief Color scheme currently displayed by a glass item.
+ * @details Small adaptive items can change scheme with the backdrop luminance.
+ */
 export type ShownScheme = "dark" | "light";
 
-/** CSS colours for content on a glass: ordinary content and the title of a control. */
+/** @brief CSS colors for content on a glass: ordinary content and the title of a control. */
 export interface Foreground {
     readonly text: string;
     readonly title: string;
 }
 
-/** Look of a shape or a group. Every field is optional. */
+/** @brief Appearance options shared by standalone shapes and groups. */
 export interface MaterialOptions {
-    /** Built-in material (default "standard"). */
+    /** @brief Built-in material (default "standard"). */
     readonly preset?: Preset;
-    /** Surroundings (default: the setting of the glass, which defaults to "auto"). */
+    /** @brief Surroundings (default: the setting of the glass, which defaults to "auto"). */
     readonly appearance?: Appearance;
     /**
-     * Fields that replace those of the preset's description (top-level fields; a nested object replaces the whole
-     * field). With it the material no longer adapts its tone to the backdrop. null goes back to the preset.
+     * @brief Color overlay whose alpha controls its strength.
+     * @details null removes the overlay.
      */
-    readonly material?: Partial<MaterialSpec> | null;
-    /** Colour laid over the glass; its alpha is the strength. null removes it. With "prominent" it replaces the accent. */
     readonly tint?: Rgba | null;
-    /** Opacity of the glass with its shadow, 0..1 (default 1). */
+    /** @brief Opacity of the glass with its shadow, 0..1 (default 1). */
     readonly opacity?: number;
-    /** Shown (default) or hidden. */
+    /**
+     * @brief Color-separation multiplier from 0 (off) to 1 (original preset distance).
+     * @details Omitted or null inherits the canvas default, initially 0.25. Other optical effects
+     * remain unchanged; presets without color separation stay unchanged.
+     */
+    readonly chromaticAberration?: number | null;
+    /** @brief Shown (default) or hidden. */
     readonly visible?: boolean;
-    /** Pressed: a faint veil over the glass (white on dark glass, black on light glass). */
+    /**
+     * @brief Pressed: a faint veil over the glass (white on dark glass, black on light glass).
+     */
     readonly pressed?: boolean;
-    /** How visibility changes and removal look (default "materialize"). */
+    /** @brief How visibility changes and removal look (default "materialize"). */
     readonly transition?: Transition;
     /**
-     * Small glass (short side up to 64) follows the luminance of the backdrop under it: its tone moves with it and it
-     * turns light over a bright backdrop (default true). false keeps the fixed tone of its scheme, as glass of a fixed
-     * size class does.
+     * @brief Follow backdrop luminance for eligible small glass (default true).
+     * @details Items with a short side up to 64 CSS pixels can change tone and scheme. false keeps
+     * the selected scheme's fixed tone; fixed size classes remain ineligible.
      */
     readonly adaptive?: boolean;
-    /** Called when the scheme the glass shows changes (see `GlassItem.shownScheme`). null removes it. */
+    /**
+     * @brief Callback for changes to `GlassItem.shownScheme`.
+     * @details null removes the callback.
+     */
     readonly onScheme?: ((scheme: ShownScheme) => void) | null;
 }
 
-/** A rectangle in CSS pixels from the top-left corner of the canvas. */
+/** @brief A rectangle in CSS pixels from the top-left corner of the canvas. */
 export interface FrameOptions {
     readonly x: number;
     readonly y: number;
     readonly width: number;
     readonly height: number;
-    /** Corner radius, or four radii (top-left, top-right, bottom-right, bottom-left). Default: half the short side. */
-    readonly radius?: Radius;
-    /** Corner construction (default "smooth"). */
+    /**
+     * @brief Corner radius, or four radii (top-left, top-right, bottom-right, bottom-left).
+     * @details Default: half the short side. null restores this automatic radius on updates.
+     */
+    readonly radius?: Radius | null;
+    /** @brief Corner construction (default "smooth"). */
     readonly corner?: CornerStyle;
 }
 
-/** Options of `Glass.add`. */
+/** @brief Options of `Glass.add`. */
 export interface ShapeOptions extends FrameOptions, MaterialOptions {
     /**
-     * Outline of any shape instead of a rounded rectangle: the alpha channel of an image or canvas, stretched over
-     * the frame (radius and corner are not used). Only a shape made with a mask can get another one later.
+     * @brief Alpha mask stretched over the frame.
+     * @details Masked shapes ignore radius and corner. Only a shape created with a mask can replace
+     * its mask later.
      */
     readonly mask?: TexImageSource;
 }
-/** Any subset of the shape options; the fields left out keep their value. */
+/** @brief Any subset of the shape options; the fields left out keep their value. */
 export type ShapeUpdate = Partial<ShapeOptions>;
 
-/** Options of `Glass.addGroup`. */
+/** @brief Options of `Glass.addGroup`. */
 export interface GroupOptions extends MaterialOptions {
-    /** Distance in CSS pixels over which neighbouring members flow into each other (default 0: they only share the glass). */
+    /**
+     * @brief Distance in CSS pixels over which neighboring members flow into each other (default 0:
+     * they only share the glass).
+     */
     readonly spacing?: number;
 }
-/** Any subset of the group options. */
+/** @brief Any subset of the group options. */
 export type GroupUpdate = Partial<GroupOptions>;
-/** Options of `GlassGroup.add`: a rounded rectangle, or with `mask` any outline. */
+/** @brief Options of `GlassGroup.add`: a rounded rectangle, or with `mask` any outline. */
 export interface MemberOptions {
     readonly x: number;
     readonly y: number;
     readonly width: number;
     readonly height: number;
-    /** Corner radius, or four radii (default: half the short side). */
-    readonly radius?: Radius;
-    /** Corner construction (default "smooth"); fixed once the member is added. */
+    /** @brief Corner radius, or four radii; null restores the default half-short-side radius. */
+    readonly radius?: Radius | null;
+    /** @brief Corner construction (default "smooth"); fixed once the member is added. */
     readonly corner?: CornerStyle;
-    /** Outline from the alpha channel of an image or canvas, stretched over the frame (at most 4 such members per group). */
+    /**
+     * @brief Outline from the alpha channel of an image or canvas, stretched over the frame (at
+     * most 4 such members per group).
+     */
     readonly mask?: TexImageSource;
 }
-/** Any subset of the member frame; `mask` replaces the mask of a member made with one. */
+/**
+ * @brief Any subset of the member frame; `mask` replaces the mask of a member made with one.
+ */
 export type MemberUpdate = Partial<Pick<MemberOptions, "x" | "y" | "width" | "height" | "radius" | "mask">>;
 
 /**
- * Surroundings that change the built-in materials. The accessibility settings follow the device by default, the way
- * system glass does.
+ * @brief Surroundings that change the built-in materials.
+ * @details Accessibility settings follow device preferences by default.
  */
 export interface EnvironmentOptions {
     /**
-     * The window is the active one (default true). false gives the flatter glass of an inactive window; "auto" follows
-     * the focus of the page.
+     * @brief Window activity used to choose a material variant (default true).
+     * @details false selects the flatter inactive variant; "auto" follows page focus.
      */
     readonly active?: Follow;
-    /** The more opaque, more saturated variant of the standard material (default false). */
+    /**
+     * @brief The more opaque, more saturated variant of the standard material (default false).
+     */
     readonly tinted?: boolean;
-    /** Nearly opaque, strongly blurred glass without refraction. "auto" (default) follows `prefers-reduced-transparency`. */
+    /**
+     * @brief Nearly opaque, strongly blurred glass without refraction.
+     * @details "auto" (default) follows `prefers-reduced-transparency`.
+     */
     readonly reduceTransparency?: Follow;
-    /** A stronger, more opaque tone. "auto" (default) follows `prefers-contrast: more`. */
+    /**
+     * @brief A stronger, more opaque tone.
+     * @details "auto" (default) follows `prefers-contrast: more`.
+     */
     readonly increaseContrast?: Follow;
-    /** No refraction inside the glass and more blur. "auto" (default) follows `prefers-reduced-motion: reduce`. */
+    /**
+     * @brief No refraction inside the glass and more blur.
+     * @details "auto" (default) follows `prefers-reduced-motion: reduce`.
+     */
     readonly reduceMotion?: Follow;
-    /** Rim lights drawn as a plain outline instead of shaded bands (default false). */
+    /** @brief Rim lights drawn as a plain outline instead of shaded bands (default false). */
     readonly buttonShapes?: boolean;
 }
 
-/** Options of `createGlass`. */
+/** @brief Options of `createGlass`. */
 export interface GlassOptions {
-    /** Default surroundings of the shapes (default "auto"). */
+    /** @brief Default color-separation multiplier for shapes and groups (0..1, default 0.25). */
+    readonly chromaticAberration?: number;
+    /** @brief Default surroundings of the shapes (default "auto"). */
     readonly appearance?: Appearance;
-    /** Keep the drawing buffer at the displayed size of the canvas times the pixel ratio (default true). */
+    /**
+     * @brief Keep the drawing buffer at the displayed size of the canvas times the pixel ratio
+     * (default true).
+     */
     readonly autoResize?: boolean;
-    /** Upper limit of device pixels per CSS pixel (default 2). */
+    /** @brief Upper limit of device pixels per CSS pixel (default 2). */
     readonly maxPixelRatio?: number;
-    /** Glass over glass (default "exact"). */
+    /** @brief Glass over glass (default "exact"). */
     readonly stacking?: StackingMode;
-    /** Turn of the rim lights in radians, clockwise (default 0). */
+    /** @brief Turn of the rim lights in radians, clockwise (default 0). */
     readonly lightAngle?: number;
-    /** Picture behind the glass. */
+    /** @brief Picture behind the glass. */
     readonly backdrop?: TexImageSource;
-    /** How a backdrop of another size is laid on the canvas (default "cover"). */
+    /** @brief How a backdrop of another size is laid on the canvas (default "cover"). */
     readonly fit?: Fit;
-    /** Upload the backdrop again on every frame (a playing video, an animated canvas). */
+    /**
+     * @brief Upload the backdrop again on every frame (a playing video, an animated canvas).
+     */
     readonly live?: boolean;
-    /** Window activity, the tinted setting and the accessibility settings. */
+    /** @brief Window activity, the tinted setting and the accessibility settings. */
     readonly environment?: EnvironmentOptions;
     /**
-     * Draw in extended range where the screen shows values above the standard white (default false). "auto" follows
-     * `dynamic-range: high`. It needs a browser with half-float drawing buffers; otherwise the output stays standard.
-     * Only a glass created with this option (true or "auto") can switch to extended range later.
+     * @brief Draw in extended range where the screen shows values above the standard white (default
+     * false).
+     * @details "auto" follows `dynamic-range: high`. It needs a browser with half-float drawing
+     * buffers; otherwise the output stays standard. Only a glass created with this option (true or
+     * "auto") can switch to extended range later.
      */
     readonly extendedRange?: Follow;
-    /** Brightest value of the screen relative to the standard white, used with extended range (default 2). */
+    /**
+     * @brief Brightest value of the screen relative to the standard white, used with extended range
+     * (default 1; browsers do not expose the current numeric headroom). Supply a finite value
+     * of at least 1 from the host; potential hardware capability is a separate quantity.
+     */
     readonly headroom?: number;
-    /** Accent colour of the "prominent" preset (default a blue, 0 / 0.478 / 1). */
-    readonly accent?: Rgb;
-    /** Called when the WebGL context is lost; drawing pauses until it is back. */
+    /** @brief Display brightness multiplier; preferred name for `headroom`. */
+    readonly displayHeadroom?: number;
+    /** @brief Called when the WebGL context is lost; drawing pauses until it is back. */
     readonly onContextLost?: () => void;
-    /** Called when the context is back and the glass has been rebuilt ("" ) or cannot be rebuilt (the reason). */
+    /**
+     * @brief Called when the context is back and the glass has been rebuilt ("" ) or cannot be
+     * rebuilt (the reason).
+     */
     readonly onContextRestored?: (error: string) => void;
 }
 
@@ -177,7 +234,11 @@ export function kindOf(c: CornerStyle | undefined): CornerKind {
     return c === "circular" ? CORNER_CIRCULAR : CORNER_SMOOTH;
 }
 
-/** @internal Radius the renderer takes for a frame: the one radius, half the short side by default, 0 with four radii. */
+/**
+ * @brief Radius the renderer takes for a frame: the one radius, half the short side by default, 0
+ * with four radii.
+ * @internal
+ */
 export function roundOf(r: Radius | null, width: number, height: number): number {
     return typeof r === "number" ? r : r === null ? (width < height ? width : height) * 0.5 : 0;
 }

@@ -1,9 +1,14 @@
+/**
+ * @file tone.ts
+ * @brief Backdrop luminance readings and adaptive material transitions.
+ */
+
 import { SCHEME_DARK, SCHEME_LIGHT } from "../layout.js";
 import { adaptScheme, luminanceLevel } from "../material.js";
 import { A, ADAPT_FIRST, ADAPT_LIVE, ADAPT_OFF, MATERIAL_DARK, OMEGA, R } from "./lanes.js";
 import { Atlas } from "./atlas.js";
 
-/** Adaptive tone: luminance readings and transitions. */
+/** @brief Adaptive tone: luminance readings and transitions. */
 export abstract class Tone extends Atlas {
     // Measure mean backdrop luminance under adaptive shapes of seq[start..end).
     // Mode 0 reads new shapes synchronously before the batch is drawn.

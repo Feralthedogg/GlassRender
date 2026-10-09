@@ -1,9 +1,17 @@
+/**
+ * @file shape.ts
+ * @brief Standalone glass frames, masks and DOM bounds tracking.
+ */
+
 import type { Renderer } from "../renderer/renderer.js";
 import type { Glass } from "./glass.js";
 import { GlassItem, paintElement } from "./item.js";
 import { kindOf, roundOf, type CornerStyle, type Radius, type ShapeOptions, type ShapeUpdate } from "./types.js";
 
-/** One piece of glass on a canvas. Made by `Glass.add`. */
+/**
+ * @brief One piece of glass on a canvas.
+ * @details Made by `Glass.add`.
+ */
 export class GlassShape extends GlassItem {
     private x: number;
     private y: number;
@@ -17,7 +25,10 @@ export class GlassShape extends GlassItem {
     /** @internal */
     everyFrame: boolean;
 
-    /** @internal Use `Glass.add`. */
+    /**
+     * @brief Use `Glass.add`.
+     * @internal
+     */
     constructor(glass: Glass, renderer: Renderer, o: ShapeOptions) {
         super(glass, renderer, o);
         this.x = o.x;
@@ -40,7 +51,7 @@ export class GlassShape extends GlassItem {
         this.start();
     }
 
-    /** Change any options; the ones left out keep their value. */
+    /** @brief Change any options; the ones left out keep their value. */
     set(u: ShapeUpdate): this {
         if (this.removed) return this;
         let geo = false;
@@ -55,31 +66,34 @@ export class GlassShape extends GlassItem {
             else this.error = "only a shape made with a mask can get another mask";
         }
         const mat = this.takeMaterial(u);
-        if (geo) this.applyGeometry(mat);
+        if (geo) this.applyGeometry();
         if (mat) this.applyMaterial();
         if (u.visible !== undefined) this.setVisible(u.visible);
         this.glass.update();
         return this;
     }
 
-    /** Move the shape (CSS pixels). */
+    /** @brief Move the shape (CSS pixels). */
     move(x: number, y: number): this {
-        if (!this.removed && (x !== this.x || y !== this.y)) { this.x = x; this.y = y; this.applyGeometry(false); this.glass.update(); }
+        if (!this.removed && (x !== this.x || y !== this.y)) { this.x = x; this.y = y; this.applyGeometry(); this.glass.update(); }
         return this;
     }
 
-    /** Resize the shape (CSS pixels), keeping its top-left corner. */
+    /** @brief Resize the shape (CSS pixels), keeping its top-left corner. */
     resize(width: number, height: number): this {
         if (!this.removed && (width !== this.width || height !== this.height)) {
-            this.width = width; this.height = height; this.applyGeometry(false); this.glass.update();
+            this.width = width; this.height = height; this.applyGeometry(); this.glass.update();
         }
         return this;
     }
 
     /**
-     * Take the frame from an element's box, now and whenever the element is resized or the page scrolls. The element
-     * gets the colours for content on this glass as the custom properties `--glass-foreground` and `--glass-title`.
-     * @param everyFrame Measure it on every frame as well (for elements moved by CSS animations or transforms).
+     * @brief Take the frame from an element's box, now and whenever the element is resized or the
+     * page scrolls.
+     * @details The element gets the colors for content on this glass as the custom properties
+     * `--glass-foreground` and `--glass-title`.
+     * @param everyFrame Measure it on every frame as well (for elements moved by CSS animations or
+     * transforms).
      */
     follow(element: Element, everyFrame = false): this {
         if (this.removed) return this;
@@ -91,7 +105,7 @@ export class GlassShape extends GlassItem {
         return this;
     }
 
-    /** Stop following an element. */
+    /** @brief Stop following an element. */
     override unfollow(): void {
         if (this.element !== null) {
             this.glass.unwatch(this);
@@ -105,15 +119,14 @@ export class GlassShape extends GlassItem {
         return this.element;
     }
 
-    /** @internal Frame measured from the followed element. */
+    /**
+     * @brief Frame measured from the followed element.
+     * @internal
+     */
     place(x: number, y: number, w: number, h: number): void {
         if (this.removed || (x === this.x && y === this.y && w === this.width && h === this.height)) return;
         this.x = x; this.y = y; this.width = w; this.height = h;
-        this.applyGeometry(false);
-    }
-
-    protected shortSide(): number {
-        return this.width < this.height ? this.width : this.height;
+        this.applyGeometry();
     }
 
     protected paint(): void {
@@ -129,10 +142,9 @@ export class GlassShape extends GlassItem {
         if (r !== null && typeof r !== "number") this.renderer.setCorners(this.id, r[0], r[1], r[2], r[3]);
     }
 
-    // Frame and corners; a described material follows a new short side unless it is applied anyway.
-    private applyGeometry(later: boolean): void {
+    // Frame and corners; the renderer resolves the native material for the new geometry.
+    private applyGeometry(): void {
         this.renderer.setShape(this.id, this.x, this.y, this.width, this.height, this.round());
         if (!this.masked) this.applyCorners();
-        if (!later && this.material !== null && this.shortSide() !== this.side) this.applyMaterial();
     }
 }

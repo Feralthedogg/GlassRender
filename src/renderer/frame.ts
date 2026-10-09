@@ -1,11 +1,16 @@
-// Uploads, layered and partial redraws, and frame output.
-import { BLOCK_BYTES, FEATURE_FIELD, UNION_BYTES } from "../layout.js";
-import { headroomShare } from "../material.js";
-import { A, ADAPT_LIVE, B, DRAW_BOTH, FLAG_READ, GEOM_FIELD, GEOM_UNION, MATERIAL_CUSTOM, R, RGBA16F, RGBA8 } from "./lanes.js";
-import { Tone } from "./tone.js";
+/**
+ * @file frame.ts
+ * @brief GPU uploads, layered redraws and frame presentation.
+ */
 
-/** One frame: uploads, depth batches, the kept scene and the output range. */
-export abstract class Frame extends Tone {
+import { edrFactor, hdrScale, hdrScaleEnabled } from "../hdr.js";
+import { BLOCK_BYTES, FEATURE_FIELD, FEATURE_TINT, ROW_GRID, UNION_BYTES } from "../layout.js";
+import { headroomShare } from "../material.js";
+import { A, ADAPT_LIVE, B, DRAW_BOTH, FLAG_READ, GEOM_BOX, GEOM_FIELD, GEOM_UNION, R, RGBA16F, RGBA8 } from "./lanes.js";
+import { Tint } from "./tint.js";
+
+/** @brief One frame: uploads, depth batches, the kept scene and the output range. */
+export abstract class Frame extends Tint {
     // Upload the stale parts of the shape and union blocks.
     protected upload(): void {
         const gl = this.gl;
@@ -39,14 +44,15 @@ export abstract class Frame extends Tone {
         gl.bindFramebuffer(0x8d40, this.bothFbo);
         gl.viewport(0, 0, w, h);
         gl.useProgram(this.split);
-        gl.uniform1f(this.splitT, this.topDown ? 1 : 0);
+        gl.uniform1f(this.splitT, this.topDown !== this.extended ? 1 : 0);
         gl.drawArrays(4, 0, 3);
         gl.bindTexture(0x0de1, this.copyTex);
     }
 
-    // Copy the pixels the READ shapes of seq[start..end) cover, inside the clip box, into the texture later shapes read:
-    // one blit of the box around them (the scene holds only this depth and the ones below it yet, so the extra
-    // pixels in that box are right as well, and one copy is far cheaper than one per shape).
+    /*
+     * Copy one bounding rectangle for the READ shapes in seq[start..end). The scene contains only
+     * completed depths, so copying intervening pixels is valid and avoids a blit per shape.
+     */
     protected keepDepth(start: number, end: number): void {
         const gl = this.gl, bd = this.bounds, sq = this.seq, fl = this.flags, c = this.clip;
         let x0 = 1e30, y0 = 1e30, x1 = -1e30, y1 = -1e30;
@@ -62,7 +68,8 @@ export abstract class Frame extends Tone {
         if (bx1 <= bx0 || by1 <= by0) return;
         gl.bindFramebuffer(0x8ca8, this.sceneFbo);
         gl.bindFramebuffer(0x8ca9, this.copyFbo);
-        gl.blitFramebuffer(bx0, by0, bx1, by1, bx0, by0, bx1, by1, 0x4000, 0x2600);
+        const sy0 = this.extended ? this.height - by1 : by0, sy1 = this.extended ? this.height - by0 : by1;
+        gl.blitFramebuffer(bx0, sy0, bx1, sy1, bx0, sy0, bx1, sy1, 0x4000, 0x2600);
         gl.bindFramebuffer(0x8d40, this.sceneFbo);
     }
 
@@ -73,7 +80,10 @@ export abstract class Frame extends Tone {
         const cx0 = c[0] as number, cy0 = c[1] as number, cx1 = c[2] as number, cy1 = c[3] as number;
         this.upload();
         // the shadow around a shape blends over what is there; its body replaces it
-        gl.enable(0x0be2); gl.blendFunc(1, 0x0303);
+        if (this.extended) {
+            gl.disable(0x0be2);
+            gl.activeTexture(0x84c6); gl.bindTexture(0x0de1, this.destinationTex); gl.activeTexture(0x84c0);
+        } else { gl.enable(0x0be2); gl.blendFunc(1, 0x0303); }
         let cur: WebGLProgram | null = null, page = -1;
         for (let i = start; i < end; i++) {
             const slot = sq[i] as number, p = progs[slot] as WebGLProgram | null, rb = slot * R, b = slot * B;
@@ -92,16 +102,43 @@ export abstract class Frame extends Tone {
                 gl.activeTexture(0x84c2); gl.bindTexture(0x0de1, ft); gl.activeTexture(0x84c0);
             }
             gl.bindBufferRange(0x8a11, 0, ubo, slot * sb, BLOCK_BYTES);
-            gl.drawArrays(5, 0, 4);
+            gl.bindVertexArray(this.vao);
+            if (((this.keys[slot] as number) & FEATURE_TINT) !== 0 && !this.bindTintMask()) continue;
+            if (this.groupLayer(this.keys[slot] as number)) { this.drawGroup(slot, p); cur = null; continue; }
+            if (this.extended) this.keepDestination(slot);
+            if (gk === GEOM_BOX) { if (!this.extended || !this.drawWorldBody(slot, p)) gl.drawArrays(4, 0, 150); }
+            else gl.drawArrays(5, 0, 4);
+            if (this.separateTint(this.keys[slot] as number)) { this.drawTint(slot); cur = null; }
+            if (this.separateRim(this.keys[slot] as number)) { this.drawRim(slot); cur = null; }
         }
         gl.disable(0x0be2);
     }
 
-    // A partial frame of a kept layered scene. The pixels that change are the old and new bounds of the shapes whose
-    // output changed, and the bounds of every shape that reads such pixels: in drawing order, since a shape only reads
-    // the shapes drawn before it. Those readers rebuild their pyramids. The box around all of them and around the
-    // regions the rebuilt shapes capture is drawn again from the backdrop up, every shape that reaches it clipped to it;
-    // depths without such shapes are skipped and the rest of the scene stays as it was.
+    // Current framebuffer color for one draw, independent of its captured/refraction backdrop.
+    protected keepDestination(slot: number): void {
+        const gl = this.gl, b = slot * B, bd = this.bounds, c = this.clip;
+        let x0 = bd[b] as number, y0 = bd[b + 1] as number, x1 = bd[b + 2] as number, y1 = bd[b + 3] as number;
+        if (this.geoms[slot] === GEOM_BOX) {
+            const g = slot * this.stride + ROW_GRID * 4, d = this.blocks;
+            // The actual grid may reach farther than the nominal body/shadow rectangle (outline presets).
+            x0 = Math.min(x0, ((d[g] as number) + 1) * this.width * 0.5);
+            x1 = Math.max(x1, ((d[g + 5] as number) + 1) * this.width * 0.5);
+            y0 = Math.min(y0, ((d[g + 6] as number) + 1) * this.height * 0.5);
+            y1 = Math.max(y1, ((d[g + 11] as number) + 1) * this.height * 0.5);
+        }
+        const bx0 = Math.max(0, c[0] as number, Math.floor(x0)), by0 = Math.max(0, c[1] as number, Math.floor(y0));
+        const bx1 = Math.min(this.width, c[2] as number, Math.ceil(x1)), by1 = Math.min(this.height, c[3] as number, Math.ceil(y1));
+        if (!(bx1 > bx0 && by1 > by0)) return;
+        gl.bindFramebuffer(0x8ca8, this.sceneFbo); gl.bindFramebuffer(0x8ca9, this.destinationFbo);
+        const sy0 = this.height - by1, sy1 = this.height - by0;
+        gl.blitFramebuffer(bx0, sy0, bx1, sy1, bx0, sy0, bx1, sy1, 0x4000, 0x2600);
+        gl.bindFramebuffer(0x8d40, this.sceneFbo);
+    }
+
+    /*
+     * Include old bounds, new bounds and rebuilt capture regions in the dirty clip. Redraw
+     * intersecting depths from the backdrop up so dependent shapes see the updated output.
+     */
     protected partial(): void {
         const gl = this.gl, n = this.count, o = this.order, bd = this.bounds, sh = this.shown, ch = this.changed, rf = this.rebuild;
         const rg = this.reg, dw = this.draws;
@@ -143,7 +180,7 @@ export abstract class Frame extends Tone {
         c[0] = bx0; c[1] = by0; c[2] = bx1; c[3] = by1;
         gl.activeTexture(0x84c1);
         gl.bindTexture(0x0de1, this.source);
-        gl.enable(0x0c11); gl.scissor(bx0, by0, bx1 - bx0, by1 - by0);
+        gl.enable(0x0c11); gl.scissor(bx0, this.extended ? H - by1 : by0, bx1 - bx0, by1 - by0);
         this.begin();
         gl.disable(0x0c11);
         gl.activeTexture(0x84c0);
@@ -161,7 +198,7 @@ export abstract class Frame extends Tone {
             gl.bindVertexArray(this.vao);
             gl.bindFramebuffer(0x8d40, this.sceneFbo);
             gl.viewport(0, 0, W, H);
-            gl.enable(0x0c11); gl.scissor(bx0, by0, bx1 - bx0, by1 - by0);
+            gl.enable(0x0c11); gl.scissor(bx0, this.extended ? H - by1 : by0, bx1 - bx0, by1 - by0);
             this.drawDepth(start, end, true);
             gl.disable(0x0c11);
             if (d + 1 < nd) this.keepDepth(start, end);
@@ -210,13 +247,16 @@ export abstract class Frame extends Tone {
         const a = gl.createTexture() as WebGLTexture | null, b = gl.createTexture() as WebGLTexture | null;
         const fa = gl.createFramebuffer() as WebGLFramebuffer | null, fb = gl.createFramebuffer() as WebGLFramebuffer | null;
         const fc = gl.createFramebuffer() as WebGLFramebuffer | null;
-        if (a === null || b === null || fa === null || fb === null || fc === null) {
+        const destination = this.extended ? gl.createTexture() as WebGLTexture | null : null;
+        const destinationFbo = this.extended ? gl.createFramebuffer() as WebGLFramebuffer | null : null;
+        if (a === null || b === null || fa === null || fb === null || fc === null || (this.extended && (destination === null || destinationFbo === null))) {
             gl.deleteTexture(a); gl.deleteTexture(b); gl.deleteFramebuffer(fa); gl.deleteFramebuffer(fb); gl.deleteFramebuffer(fc);
+            gl.deleteTexture(destination); gl.deleteFramebuffer(destinationFbo);
             return;
         }
         gl.activeTexture(0x84c2);
-        for (let i = 0; i < 2; i++) {
-            gl.bindTexture(0x0de1, i === 0 ? a : b);
+        for (let i = 0; i < (this.extended ? 3 : 2); i++) {
+            gl.bindTexture(0x0de1, i === 0 ? a : i === 1 ? b : destination);
             gl.texStorage2D(0x0de1, 1, this.extended ? RGBA16F : RGBA8, w, h);
             gl.texParameteri(0x0de1, 0x2801, 0x2601); gl.texParameteri(0x0de1, 0x2800, 0x2601);
             gl.texParameteri(0x0de1, 0x2802, 0x812f); gl.texParameteri(0x0de1, 0x2803, 0x812f);
@@ -228,16 +268,24 @@ export abstract class Frame extends Tone {
         gl.bindFramebuffer(0x8d40, fc);
         gl.framebufferTexture2D(0x8d40, 0x8ce0, 0x0de1, a, 0); gl.framebufferTexture2D(0x8d40, 0x8ce1, 0x0de1, b, 0);
         gl.drawBuffers(DRAW_BOTH);
+        if (destinationFbo !== null) {
+            gl.bindFramebuffer(0x8d40, destinationFbo); gl.framebufferTexture2D(0x8d40, 0x8ce0, 0x0de1, destination, 0);
+        }
         this.sceneTex = a; this.copyTex = b; this.sceneFbo = fa; this.copyFbo = fb; this.bothFbo = fc;
+        this.destinationTex = destination; this.destinationFbo = destinationFbo;
         this.sceneW = w; this.sceneH = h;
     }
 
     protected dropScene(): void {
+        this.dropWorldSurface(true);
+        this.dropGroup(true, false);
         const gl = this.gl;
         if (this.sceneTex === null) return;
         gl.deleteFramebuffer(this.sceneFbo); gl.deleteFramebuffer(this.copyFbo); gl.deleteFramebuffer(this.bothFbo);
         gl.deleteTexture(this.sceneTex); gl.deleteTexture(this.copyTex);
+        gl.deleteFramebuffer(this.destinationFbo); gl.deleteTexture(this.destinationTex);
         this.sceneTex = null; this.copyTex = null; this.sceneFbo = null; this.copyFbo = null; this.bothFbo = null;
+        this.destinationTex = null; this.destinationFbo = null;
         this.sceneW = 0; this.sceneH = 0;
     }
 
@@ -256,24 +304,41 @@ export abstract class Frame extends Tone {
             if (!ext && this.extended) gl.drawingBufferStorage(RGBA8, this.width, this.height);
         }
         const share = ext ? headroomShare(this.headroom) : 0;
-        if (ext !== this.extended) { this.extended = ext; this.dropScene(); this.backdropDirty = true; this.frame[2] = ext ? 0 : 1; this.frameDirty = true; }
+        if (ext !== this.extended) {
+            this.extended = ext; this.layoutDirty = true; this.dropScene(); this.backdropDirty = true; this.frame[2] = ext ? 0 : 1; this.frameDirty = true;
+            for (let slot = 0; slot < this.capacity; slot++) if (this.kinds[slot] !== 0) this.finish(slot);
+        }
         if (share !== this.share) {
             this.share = share;
             const n = this.capacity, kinds = this.kinds;
             for (let i = 0; i < n; i++) {
                 const k = kinds[i] as number;
                 if (k === 0) continue;
-                if (k === MATERIAL_CUSTOM) this.packed[i] = -1;
                 this.refresh(i);
             }
         }
         this.stale = true;
+        this.applySurfaceScale();
+    }
+
+    // Changing the actual surface/context scale selects a shader variant; headroom never guesses this profile.
+    protected applySurfaceScale(): void {
+        const f = this.frame, priorEDR = f[14] !== 1, priorHDR = f[15] !== 0;
+        const active = this.extended && hdrScaleEnabled(0, true, this.surfaceScale, this.contextScale);
+        if (active) hdrScale(f, 12, this.contextScale);
+        else { f[12] = 1; f[13] = 1; }
+        f[14] = this.extended ? edrFactor(this.surfaceScale, this.surfaceStateFactor, this.surfaceStateFactor !== 1) : 1;
+        f[15] = active ? 1 : 0;
+        if (priorEDR !== (f[14] !== 1) || priorHDR !== active) {
+            for (let i = 0; i < this.capacity; i++) if (this.kinds[i] !== 0) this.finish(i);
+        }
+        this.frameDirty = true; this.full = true; this.stale = true;
     }
 
     /**
-     * Finish every transition now: renders once, reads the backdrop luminance under each adaptive shape (a blocking
-     * read) and jumps to the settled tone; shapes that are appearing or disappearing jump to their end state. Use it
-     * before `render` when a single frame must be final.
+     * @brief Finish tone and visibility transitions before producing a settled frame.
+     * @details Renders once and performs blocking luminance reads for adaptive shapes. Use before
+     * `render` when the next frame must show the final state.
      */
     settle(): void {
         this.render(this.lastTime < 0 ? 0 : this.lastTime);
@@ -289,9 +354,11 @@ export abstract class Frame extends Tone {
     }
 
     /**
-     * Draw the backdrop and every shape into the default framebuffer.
-     * @param now Time in milliseconds (the animation frame timestamp); it drives tone transitions. Default: the clock.
-     * @returns True while another frame is needed: a tone transition is running or a luminance reading is pending.
+     * @brief Draw the backdrop and every shape into the default framebuffer.
+     * @param now Time in milliseconds (the animation frame timestamp); it drives tone transitions.
+     * Default: the clock.
+     * @returns True while another frame is needed: a tone transition is running or a luminance
+     * reading is pending.
      */
     render(now?: number): boolean {
         const gl = this.gl, t = now === undefined ? performance.now() : now;
@@ -305,8 +372,8 @@ export abstract class Frame extends Tone {
         if (this.animate(dt)) busy = true;
         if (this.layoutDirty) this.layout();
         if (this.maskDirty) this.bake();
-        const layered = this.layered, all = this.backdropDirty;
-        const flip = layered ? 0 : this.topDown ? 1 : 0;
+        const layered = this.layered || this.extended, all = this.backdropDirty;
+        const flip = this.extended ? 1 : layered ? 0 : this.topDown ? 1 : 0;
         if (this.frame[3] !== flip) { this.frame[3] = flip; this.frameDirty = true; }
         // a new frame block (light turn, row order) changes every shape
         const turned = this.frameDirty;

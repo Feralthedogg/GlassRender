@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:,">
-<title>GlassRender playground</title>
+<title>GlassRender material playground</title>
 <link rel="stylesheet" href="shared/demo.css">
 <style>
   html, body { height: 100%; overflow: hidden; }
@@ -133,7 +133,7 @@
     <div class="brand-mark" data-icon="logo"></div>
     <div class="brand">
       <div class="brand-name">GlassRender</div>
-      <div class="brand-sub">Core API playground</div>
+      <div class="brand-sub">Material playground</div>
     </div>
     <span class="badge">WebGL2</span>
     <button class="btn ghost icon-only sheet-toggle" id="sheet" aria-label="Show settings" aria-expanded="false" data-icon="down"></button>
@@ -152,7 +152,7 @@
           <button class="btn icon-only" id="preset-next" aria-label="Next preset" data-icon="right"></button>
         </div>
       </div>
-      <div class="field"><span class="label">Tint</span><div class="swatches" id="tints"></div></div>
+
       <div class="field" id="radius-field">
         <span class="label">Radius</span>
         <div class="range"><input id="radius" type="range" min="0" max="120" aria-label="Corner radius"><output id="radius-out"></output></div>
@@ -169,21 +169,10 @@
           <button class="btn icon-only" id="press" aria-label="Hold to press" title="Hold to press (P)" data-icon="pointer"></button>
         </div>
       </div>
-    </section>
-
-    <section class="section">
-      <h2 class="section-title">Chromatic aberration</h2>
-      <div class="toggle-row" title="The material's aberration field: red pulled outward and blue inward near the rim">
-        <span>Rim fringes <code>aberration</code></span>
-        <button class="switch" id="rim-switch" role="switch" aria-checked="false" aria-label="Rim fringes"></button>
+      <div class="field">
+        <span class="label">Color split</span>
+        <div class="range"><input id="chromatic" type="range" min="0" max="100" aria-label="Chromatic aberration"><output id="chromatic-out"></output></div>
       </div>
-      <div class="sub" id="rim-fields"></div>
-      <div class="toggle-row" title="The material's lens field: a layer of the unblurred backdrop with its colours pulled apart">
-        <span>Lens layer <code>lens</code></span>
-        <button class="switch" id="layer-switch" role="switch" aria-checked="false" aria-label="Lens layer"></button>
-      </div>
-      <div class="sub" id="layer-fields"></div>
-      <pre class="code" id="fringe-code"></pre>
     </section>
 
     <section class="section">
@@ -201,18 +190,11 @@
         <div class="thumbs" id="backdrops" style="--count: 5"></div>
         <input id="file" type="file" accept="image/*" hidden>
       </div>
-      <div class="field"><span class="label">Accent</span><div class="swatches" id="accents"></div></div>
       <div class="field">
         <span class="label">Stacking</span>
         <div class="seg" id="stacking"><button data-value="exact">Exact</button><button data-value="flat">Flat</button></div>
       </div>
-      <div class="field">
-        <span class="label">Light</span>
-        <div class="inline">
-          <div class="range"><input id="angle" type="range" min="-180" max="180" value="0" aria-label="Light angle"><output id="angle-out"></output></div>
-          <button class="btn icon-only" id="follow" aria-pressed="false" aria-label="Light follows the pointer" title="Light follows the pointer" data-icon="pointer"></button>
-        </div>
-      </div>
+
     </section>
 
     <section class="section">
@@ -239,10 +221,8 @@
       <dl>
         <dt><kbd>1</kbd>–<kbd>7</kbd></dt><dd>Select a shape</dd>
         <dt><kbd>[</kbd><kbd>]</kbd></dt><dd>Previous or next material</dd>
-        <dt><kbd>T</kbd></dt><dd>Next tint</dd>
         <dt><kbd>H</kbd></dt><dd>Hide or show</dd>
         <dt><kbd>P</kbd></dt><dd>Hold to press</dd>
-        <dt><kbd>R</kbd></dt><dd>Rim fringes on or off</dd>
       </dl>
     </div>
     <div>
@@ -251,7 +231,6 @@
         <dt><kbd>D</kbd></dt><dd>Light or dark appearance</dd>
         <dt><kbd>B</kbd></dt><dd>Next backdrop</dd>
         <dt><kbd>S</kbd></dt><dd>Exact or flat stacking</dd>
-        <dt><kbd>L</kbd></dt><dd>Light follows the pointer</dd>
         <dt><kbd>X</kbd></dt><dd>Extended range</dd>
         <dt><kbd>K</kbd></dt><dd>Lose the context, restore after 1 s</dd>
       </dl>
@@ -280,24 +259,25 @@
 <div id="fail" class="fail" hidden><div><b>The glass cannot be drawn here</b><p id="fail-reason"></p></div></div>
 
 <script type="module">
-import { PRESET_NAMES, createGlass, packPreset, presetNumber } from "../dist/index.js";
+import { createGlass } from "../dist/core.js";
+import { MATERIALS } from "../dist/materials.js";
 import { BACKDROPS, backdropThumbnail, screenBackdrop } from "./shared/backdrops.js";
 import { icon } from "./shared/icons.js";
 import {
-    ACCENTS, ENVIRONMENT, LENS_DEFAULT, LENS_FIELDS, RIM_DEFAULT, RIM_FIELDS, TINTS, cssColor as css, fringeMaterial, materialCode, presetOrder
+    ENVIRONMENT
 } from "./shared/options.js";
 
 const $ = (id) => document.getElementById(id);
 for (const el of document.querySelectorAll("[data-icon]")) el.insertAdjacentHTML("afterbegin", icon(el.dataset.icon));
 
-const PRESETS = presetOrder(PRESET_NAMES);
+const PRESETS = MATERIALS.map(material => material.name);
 
 // ---------------------------------------------------------------- the glass
 
 const canvas = $("stage"), inspector = $("inspector");
 // the accessibility settings follow the device ("auto") until a chip turns them on here
 const env = { active: true, tinted: false, reduceTransparency: "auto", increaseContrast: "auto", reduceMotion: "auto", buttonShapes: false };
-const view = { backdrop: BACKDROPS[0].id, accent: 0, angle: 0, follow: false, note: "" };
+const view = { backdrop: BACKDROPS[0].id, note: "" };
 const made = createGlass(canvas, {
     appearance: BACKDROPS[0].scheme, backdrop: screenBackdrop(view.backdrop), environment: env, extendedRange: "auto",
     // the glass rebuilds itself when the context comes back; the page only reports it
@@ -334,7 +314,7 @@ const DEFS = [
     { id: "panel", name: "Panel", note: "A rounded rectangle with one corner radius.", w: 380, h: 236, radius: 40 },
     { id: "knob", name: "Knob", note: "Small glass follows the luminance of whatever is behind it.", w: 56, h: 56, on: "panel", dx: 28, dy: 28 },
     { id: "capsule", name: "Capsule", note: "Without a radius, the corners are half the short side.", w: 168, h: 56, on: "panel", dx: 100, dy: 28 },
-    { id: "lens", name: "Lens", note: "Clear glass, with red and blue pulled apart at the rim.", w: 220, h: 220, preset: "clear", rim: { ...RIM_DEFAULT, on: true, amount: 12, angle: 90, height: 40 } },
+    { id: "lens", name: "Lens", note: "Drag across sharp edges. Color separation is built into control and loupe; standard and clear do not include it.", w: 220, h: 220, preset: "control" },
     { id: "star", name: "Star", note: "Any outline: the alpha channel of a canvas four times finer than shown.", w: 190, h: 190, mask: starMask(760) },
     { id: "card", name: "Card", note: "Four corner radii: top-left, top-right, bottom-right, bottom-left.", w: 260, h: 156, radius: 60, corners: [1, 0.27, 1, 0.27] },
     { id: "blobs", name: "Blobs", note: "A group: outlines closer than the merge distance flow into one piece of glass.", w: 296, h: 128, group: true, spacing: 40 }
@@ -346,15 +326,13 @@ const LAYOUTS = {
 
 const shapes = DEFS.map((d) => ({
     ...d, rect: { x: 0, y: 0, width: d.w, height: d.h }, radius: d.radius ?? null, corners: d.corners ?? null,
-    preset: d.preset ?? "standard", tint: 0, opacity: 1, visible: true, spacing: d.spacing ?? 0,
-    rim: d.rim ?? { ...RIM_DEFAULT }, layer: { ...LENS_DEFAULT }, material: null,
+    preset: d.preset ?? "standard", opacity: 1, chromaticAberration: null, visible: true, spacing: d.spacing ?? 0,
     item: null, members: null, pull: 0, scheme: ""
 }));
 const byId = Object.fromEntries(shapes.map((s) => [s.id, s]));
 let selected = null, drag = null;
 
 const cornerRadius = (s) => s.corners ? s.corners.map((c) => c * s.radius) : s.radius;
-const tintOf = (s) => TINTS[s.tint].rgba;
 
 for (const s of shapes) {
     const look = { preset: s.preset, onScheme: (v) => { s.scheme = v; if (s === selected) showShape(); } };
@@ -378,17 +356,9 @@ function place(s) {
     s.members[0].set({ x: r.x, y: r.y, width: 128 * k, height: 128 * k });
     s.members[1].set({ x: r.x + 120 * k + s.pull, y: r.y + 16 * k, width: 176 * k, height: 96 * k, radius: [48 * k, 16 * k, 48 * k, 16 * k] });
 }
-// the capture margin a preset gets on its own (the third info value of its packed block); fringes reach further
-const packed = new Float32Array(200), info = new Float32Array(6);
-function presetMargin(preset, side) {
-    packPreset(packed, 0, info, 0, Math.max(0, presetNumber(preset)), side, side, 0, 1, glass.environment);
-    return info[2];
-}
-// material of a shape to the glass
+// Built-in material selection; the renderer resolves the selected profile's optical values.
 function dress(s) {
-    const side = s.group ? s.rect.height : Math.min(s.rect.width, s.rect.height);
-    s.material = fringeMaterial(s.rim, s.layer, presetMargin(s.preset, side));
-    const look = { preset: s.preset, tint: tintOf(s), opacity: s.opacity, visible: s.visible, material: s.material };
+    const look = { preset: s.preset, opacity: s.opacity, chromaticAberration: s.chromaticAberration, visible: s.visible };
     if (s.group) s.item.set({ ...look, spacing: s.spacing });
     else s.item.set(look);
 }
@@ -478,7 +448,6 @@ function resizeBy(s, hx, hy, dx, dy) {
     if (s.radius !== null) s.radius = Math.min(s.radius, Math.min(r.width, r.height) / 2);
     place(s);
     // the capture margin follows the size
-    if (s.material !== null) dress(s);
 }
 
 canvas.addEventListener("pointerdown", (e) => {
@@ -551,7 +520,6 @@ canvas.addEventListener("wheel", (e) => {
     r.y = cy - r.height / 2;
     if (s.radius !== null) s.radius = Math.min(s.radius * k, Math.min(r.width, r.height) / 2);
     place(s);
-    if (s.material !== null) dress(s);
     select(s);
 }, { passive: false });
 
@@ -560,7 +528,6 @@ canvas.addEventListener("wheel", (e) => {
 const presetSelect = $("preset");
 presetSelect.innerHTML = PRESETS.map((p) => `<option value="${p}">${p}</option>`).join("");
 $("shape-list").innerHTML = shapes.map((s) => `<button class="chip plain" data-id="${s.id}">${s.name}</button>`).join("");
-$("tints").innerHTML = TINTS.map((t, i) => `<button class="swatch${t.rgba ? "" : " none"}" data-i="${i}" aria-label="${t.name} tint" title="${t.name}"${t.rgba ? ` style="--c: ${css(t.rgba)}"` : ""}></button>`).join("");
 
 function setRange(id, value, max, text) {
     const input = $(id);
@@ -575,13 +542,13 @@ function showShape() {
     for (const b of $("shape-list").children) b.setAttribute("aria-pressed", String(b.dataset.id === s.id));
     $("shape-note").textContent = s.note + (s.id === "knob" && s.scheme ? ` It shows ${s.scheme} glass now.` : "");
     presetSelect.value = s.preset;
-    for (const b of $("tints").children) b.setAttribute("aria-pressed", String(Number(b.dataset.i) === s.tint));
     $("radius-field").hidden = s.radius === null;
     if (s.radius !== null) setRange("radius", Math.round(s.radius), Math.floor(Math.min(s.rect.width, s.rect.height) / 2), Math.round(s.radius) + "");
     $("spacing-field").hidden = !s.group;
     if (s.group) setRange("spacing", s.spacing, 80, s.spacing + "");
     setRange("opacity", Math.round(s.opacity * 100), 100, Math.round(s.opacity * 100) + "%");
-    showFringes();
+    const chromatic = Math.round(s.item.chromaticAberration * 100);
+    setRange("chromatic", chromatic, 100, chromatic + "%");
     $("visible").setAttribute("aria-pressed", String(!s.visible));
     $("visible").setAttribute("aria-label", s.visible ? "Hide" : "Show");
     $("visible").title = (s.visible ? "Hide" : "Show") + " (H)";
@@ -604,50 +571,15 @@ $("shape-list").addEventListener("click", (e) => { const b = e.target.closest("[
 presetSelect.addEventListener("change", () => { selected.preset = presetSelect.value; dress(selected); });
 $("preset-prev").addEventListener("click", () => setPreset(-1));
 $("preset-next").addEventListener("click", () => setPreset(1));
-$("tints").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-i]");
-    if (!b) return;
-    selected.tint = Number(b.dataset.i);
-    dress(selected);
-    showShape();
-});
 $("radius").addEventListener("input", (e) => { selected.radius = Number(e.target.value); place(selected); showShape(); showSelection(); });
 $("spacing").addEventListener("input", (e) => { selected.spacing = Number(e.target.value); dress(selected); showShape(); });
 $("opacity").addEventListener("input", (e) => { selected.opacity = Number(e.target.value) / 100; dress(selected); showShape(); });
+$("chromatic").addEventListener("input", (e) => { selected.chromaticAberration = Number(e.target.value) / 100; dress(selected); showShape(); });
 $("visible").addEventListener("click", () => toggleVisible());
 const pressButton = $("press");
 pressButton.addEventListener("pointerdown", (e) => { pressButton.setPointerCapture(e.pointerId); selected.item.press(true); });
 for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) pressButton.addEventListener(type, () => selected.item.press(false));
 
-// ---------------------------------------------------------------- inspector: chromatic aberration of the selected shape
-
-function sliders(container, prefix, fields) {
-    container.innerHTML = fields.map((f) => `<div class="field" title="${f.hint}"><span class="label">${f.label}</span><div class="range">` +
-        `<input id="${prefix}-${f.key}" data-key="${f.key}" type="range" min="${f.min}" max="${f.max}" step="${f.step}" aria-label="${f.label}">` +
-        `<output id="${prefix}-${f.key}-out"></output></div></div>`).join("");
-}
-sliders($("rim-fields"), "rim", RIM_FIELDS);
-sliders($("layer-fields"), "layer", LENS_FIELDS);
-
-function showFringes() {
-    const s = selected;
-    for (const [part, fields] of [["rim", RIM_FIELDS], ["layer", LENS_FIELDS]]) {
-        const v = s[part];
-        $(part + "-switch").setAttribute("aria-checked", String(v.on));
-        $(part + "-fields").hidden = !v.on;
-        for (const f of fields) setRange(part + "-" + f.key, v[f.key], undefined, v[f.key] + f.unit);
-    }
-    $("fringe-code").textContent = materialCode(s.material);
-}
-function setFringe(part, change) {
-    selected[part] = { ...selected[part], ...change };
-    dress(selected);
-    showFringes();
-}
-for (const part of ["rim", "layer"]) {
-    $(part + "-switch").addEventListener("click", () => setFringe(part, { on: !selected[part].on }));
-    $(part + "-fields").addEventListener("input", (e) => setFringe(part, { [e.target.dataset.key]: Number(e.target.value) }));
-}
 function toggleVisible() {
     selected.visible = !selected.visible;
     dress(selected);
@@ -698,15 +630,6 @@ $("file").addEventListener("change", async (e) => {
     e.target.value = "";
 });
 
-$("accents").innerHTML = ACCENTS.map((a, i) => `<button class="swatch" data-i="${i}" aria-label="${a.name} accent" title="${a.name}" style="--c: ${css(a.rgb)}"></button>`).join("");
-function setAccent(i) {
-    view.accent = i;
-    glass.setAccent(ACCENTS[i].rgb);
-    document.documentElement.style.setProperty("--accent", css(ACCENTS[i].rgb));
-    for (const b of $("accents").children) b.setAttribute("aria-pressed", String(Number(b.dataset.i) === i));
-}
-$("accents").addEventListener("click", (e) => { const b = e.target.closest("[data-i]"); if (b) setAccent(Number(b.dataset.i)); });
-
 let stacking = "exact";
 function setStacking(value) {
     stacking = value;
@@ -714,25 +637,6 @@ function setStacking(value) {
     pressOne($("stacking"), value);
 }
 $("stacking").addEventListener("click", (e) => { const b = e.target.closest("[data-value]"); if (b) setStacking(b.dataset.value); });
-
-function setAngle(radians) {
-    view.angle = radians;
-    glass.setLightAngle(radians);
-    const deg = Math.round(((radians * 180 / Math.PI + 540) % 360) - 180);
-    setRange("angle", deg, 180, deg + "°");
-}
-$("angle").addEventListener("input", (e) => setAngle(Number(e.target.value) * Math.PI / 180));
-function setFollow(on) {
-    view.follow = on;
-    $("follow").setAttribute("aria-pressed", String(on));
-    $("angle").disabled = on;
-    if (!on) setAngle(0);
-}
-$("follow").addEventListener("click", () => setFollow(!view.follow));
-// the lights turn toward the pointer, as a tilted screen would turn them
-addEventListener("pointermove", (e) => {
-    if (view.follow) setAngle(Math.atan2(e.clientX - innerWidth / 2, innerHeight / 2 - e.clientY) + Math.PI / 4);
-});
 
 // ---------------------------------------------------------------- inspector: environment and status
 
@@ -752,8 +656,6 @@ function toggleEnvironment(key) {
     else if (key === "tinted" || key === "buttonShapes") env[key] = !env[key];
     else env[key] = env[key] === true ? "auto" : true;
     glass.setEnvironment(env);
-    // the presets' capture margins depend on the surroundings, and the fringes are added to them
-    for (const s of shapes) if (s.material !== null) dress(s);
     showEnvironment();
     showShape();
 }
@@ -819,17 +721,14 @@ addEventListener("keydown", (e) => {
     else if (k === "escape") toggleHelp(false);
     else if (k >= "1" && k <= "7") select(shapes[Number(k) - 1]);
     else if (k === "[" || k === "]") setPreset(k === "]" ? 1 : -1);
-    else if (k === "t") { selected.tint = (selected.tint + 1) % TINTS.length; dress(selected); showShape(); }
     else if (k === "h") toggleVisible();
     else if (k === "p" && !e.repeat) selected.item.press(true);
-    else if (k === "r") setFringe("rim", { on: !selected.rim.on });
     else if (k === "d") setAppearance(inspector.dataset.scheme === "dark" ? "light" : "dark");
     else if (k === "b") {
         const ids = BACKDROPS.map((b) => b.id);
         setBackdrop(ids[(ids.indexOf(view.backdrop) + 1) % ids.length]);
     }
     else if (k === "s") setStacking(stacking === "exact" ? "flat" : "exact");
-    else if (k === "l") setFollow(!view.follow);
     else if (k === "x") toggleRange();
     else if (k === "k") loseContext();
     else if (ENV_KEYS[k]) toggleEnvironment(ENV_KEYS[k]);
@@ -851,9 +750,7 @@ layout();
 for (const s of shapes) dress(s);
 pressOne(thumbs, view.backdrop);
 setAppearance(BACKDROPS[0].scheme);
-setAccent(0);
 setStacking("exact");
-setAngle(0);
 showEnvironment();
 select(byId.panel);
 window.__ready = true;
