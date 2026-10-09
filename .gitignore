@@ -54,5 +54,17 @@
 !/demo/vue/tsconfig.build.json
 !/demo/vue/vite.config.js
 
+!/demo/solid/
+/demo/solid/*
+!/demo/solid/src/
+!/demo/solid/demo/
+!/demo/solid/package.json
+!/demo/solid/package-lock.json
+!/demo/solid/tsconfig.json
+!/demo/solid/tsconfig.build.json
+!/demo/solid/vite.config.js
+!/demo/solid/README.md
+!/demo/solid/LICENSE
+
 # Finder metadata
 .DS_Store

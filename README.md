@@ -7,7 +7,7 @@
 **Real-time refractive glass for the web, drawn on a WebGL2 canvas.**
 
 Blur, refraction, rim light, shadow and color fringes over any image, canvas or video,<br>
-with React, Svelte and Vue components that keep the glass under your layout.
+with React, Svelte, Vue and Solid components that keep the glass under your layout.
 
 [![version](https://img.shields.io/badge/version-0.1.1_Beta-8a5cff?style=flat-square)](https://www.npmjs.com/package/glassrender/v/0.1.1-beta)
 [![WebGL2](https://img.shields.io/badge/WebGL2-renderer-3d8bff?style=flat-square)](#browser-support)
@@ -15,7 +15,7 @@ with React, Svelte and Vue components that keep the glass under your layout.
 [![runtime dependencies](https://img.shields.io/badge/runtime_dependencies-0-2ea44f?style=flat-square)](package.json)
 [![license](https://img.shields.io/badge/license-MIT-ff6f91?style=flat-square)](LICENSE)
 
-[Install](#install) · [Quick start](#quick-start) · [Materials](#materials) · [Frameworks](#frameworks) · [Demos](#demos) · [API guide](api.md)
+[Install](#install) · [Quick start](#quick-start) · [Vanilla JS](#vanilla-js) · [Materials](#materials) · [Frameworks](#frameworks) · [Demos](#demos) · [API guide](api.md)
 
 </div>
 
@@ -25,7 +25,7 @@ Choose a `preset`; the renderer resolves its values for the shape's size, appear
 
 - **Refraction, blur and light.** Every pixel of glass refracts, blurs and lights the backdrop you supply: an image, a canvas or a playing video.
 - **28 built-in materials.** `standard`, `clear`, `menu`, `sidebar`, `dock`, `widget` and more, with size, appearance and environment rules. Some role names share the same profile.
-- **Glass that follows the DOM.** `Glass` components for React, Svelte and Vue track their boxes as the page lays out, scrolls, resizes and animates.
+- **Glass that follows the DOM.** `Glass` components for React, Svelte, Vue and Solid track their boxes as the page lays out, scrolls, resizes and animates.
 - **Groups and masks.** Neighboring shapes flow into one piece of glass, and any alpha mask becomes an outline.
 - **Chromatic aberration.** Control and lens profiles include color separation around their edges. `chromaticAberration` adjusts it from `0` to `1`, with a subtle default of `0.25`.
 - **Accessibility settings.** Follows reduced transparency, increased contrast and reduced motion, or set them yourself.
@@ -73,7 +73,7 @@ Older material recipes, raw `material` overrides and the synthetic `prominent` p
 
 ## Install
 
-GlassRender and its framework adapters are available on npm. The current release is **0.1.1 Beta** (`0.1.1-beta`), published under the `beta` tag.
+GlassRender and its React, Svelte, Vue and Solid adapters are available on npm. The current release is **0.1.1 Beta** (`0.1.1-beta`), published under the `beta` tag.
 
 ```sh
 npm install glassrender@beta
@@ -86,6 +86,7 @@ For a framework app, install the core together with the adapter you use:
 | React | `npm install glassrender@beta glassrender-react@beta` |
 | Svelte | `npm install glassrender@beta glassrender-svelte@beta` |
 | Vue | `npm install glassrender@beta glassrender-vue@beta` |
+| Solid | `npm install glassrender@beta glassrender-solid@beta` |
 
 The framework itself must already be installed in your app. To pin this release, replace `@beta` with `@0.1.1-beta` on both packages.
 
@@ -95,6 +96,7 @@ The framework itself must already be installed in your app. To pin this release,
 | React adapter | [glassrender-react](https://www.npmjs.com/package/glassrender-react) |
 | Svelte adapter | [glassrender-svelte](https://www.npmjs.com/package/glassrender-svelte) |
 | Vue adapter | [glassrender-vue](https://www.npmjs.com/package/glassrender-vue) |
+| Solid adapter | [glassrender-solid](https://www.npmjs.com/package/glassrender-solid) |
 
 ## Quick start
 
@@ -190,6 +192,49 @@ This standalone repository example imports the locally built `dist/` module. Fol
 
 The **[API guide](api.md)** covers options and defaults, all 28 presets, groups, masks, framework events, material metadata and the low-level renderer.
 
+## Vanilla JS
+
+The core works directly with JavaScript and DOM elements. No framework adapter is needed. Install `glassrender@beta` and use this in a module built by your app's bundler:
+
+```js
+import { createGlass } from "glassrender/core";
+
+const image = new Image();
+image.src = "/wallpaper.jpg";
+await image.decode();
+
+const canvas = document.getElementById("glass");
+const element = document.getElementById("panel");
+if (!canvas || !element) throw new Error("The canvas and panel elements are required.");
+const result = createGlass(canvas, { backdrop: image });
+if (!result.ok) throw new Error(result.error);
+
+const glass = result.value;
+const panel = glass.add({
+    x: 0, y: 0, width: 0, height: 0,
+    preset: "standard", radius: 24,
+}).follow(element);
+
+// Updates schedule their own frame.
+panel.set({ tint: [0.2, 0.5, 1, 0.3] });
+window.addEventListener("pagehide", () => glass.destroy(), { once: true });
+```
+
+The page supplies the canvas and panel, with CSS sizes and positioning:
+
+```html
+<canvas id="glass" style="position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none"></canvas>
+<section id="panel" style="position:relative;width:320px;padding:24px;color:var(--glass-foreground)">My panel</section>
+```
+
+For plain HTML without a bundler, use a pinned CDN import inside `<script type="module">`:
+
+```js
+import { createGlass } from "https://cdn.jsdelivr.net/npm/glassrender@0.1.1-beta/dist/core.js";
+```
+
+Serve the page over HTTP and provide a backdrop image, canvas or video. `follow(element)` tracks layout changes; `follow(element, true)` also tracks CSS animation. Call `glass.destroy()` when your app removes the scene. The complete browser example above uses the same core API.
+
 ## Frameworks
 
 | Package | Version | Requires |
@@ -197,8 +242,9 @@ The **[API guide](api.md)** covers options and defaults, all 28 presets, groups,
 | [`glassrender-react`](https://www.npmjs.com/package/glassrender-react) | 0.1.1 Beta | React 18 or later |
 | [`glassrender-svelte`](https://www.npmjs.com/package/glassrender-svelte) | 0.1.1 Beta | Svelte 5 |
 | [`glassrender-vue`](https://www.npmjs.com/package/glassrender-vue) | 0.1.1 Beta | Vue 3.4 or later |
+| [`glassrender-solid`](https://www.npmjs.com/package/glassrender-solid) | 0.1.1 Beta | Solid 1.9 or later |
 
-The three adapters share one model. `GlassCanvas` owns the canvas and the render loop, each `Glass` inside it draws glass under its own box, and `GlassGroup` merges the boxes inside it into one piece of glass. With `fixed={false}` (`:fixed="false"` in Vue), the canvas stays inside a container of your own size.
+The four adapters share one model. `GlassCanvas` owns the canvas and the render loop, each `Glass` inside it draws glass under its own box, and `GlassGroup` merges the boxes inside it into one piece of glass. With `fixed={false}` (`:fixed="false"` in Vue), the canvas stays inside a container of your own size.
 
 Install the core and your adapter in an existing framework app, then use the examples below. For the full local showcase, see [Run the repository demos](#run-the-repository-demos).
 
@@ -366,6 +412,52 @@ const backdrop = "data:image/svg+xml," + encodeURIComponent(
 
 </details>
 
+<details>
+<summary id="solid"><b>Solid</b></summary>
+<br>
+
+```sh
+npm install glassrender@beta glassrender-solid@beta
+```
+
+In a Solid app with its JSX compiler, components read signal values through reactive props:
+
+```tsx
+import { createSignal } from "solid-js";
+import { render } from "solid-js/web";
+import { GlassCanvas, Glass, GlassGroup } from "glassrender-solid";
+import type { Preset } from "glassrender/materials";
+
+function App() {
+    const [preset, setPreset] = createSignal<Preset>("standard");
+    return <GlassCanvas backdrop="/wallpaper.jpg">
+        <main style={{ padding: "32px" }}>
+            <Glass preset={preset()} radius={24} style={{ width: "320px", padding: "24px" }}>
+                <h1>GlassRender</h1>
+                <button onClick={() => setPreset(preset() === "standard" ? "clear" : "standard")}>
+                    Switch material
+                </button>
+            </Glass>
+            <GlassGroup preset="control" spacing={20}>
+                <div style={{ display: "flex", gap: "12px" }}>
+                    <Glass radius={24}><button>Previous</button></Glass>
+                    <Glass radius={24}><button>Next</button></Glass>
+                </div>
+            </GlassGroup>
+        </main>
+    </GlassCanvas>;
+}
+
+const app = document.getElementById("app");
+if (!app) throw new Error("The #app element is missing.");
+const dispose = render(() => <App />, app);
+window.addEventListener("pagehide", dispose, { once: true });
+```
+
+Use `class`, Solid style objects and DOM handlers such as `onClick`. `useGlass()` returns the nearest canvas state with reactive `glass` and `error` getters; read these inside `createEffect()` without destructuring the state. The renderer is created after client mount and destroyed on unmount. Server rendering emits markup without initializing WebGL.
+
+</details>
+
 ## Demos
 
 | Demo | Source | Address |
@@ -376,8 +468,9 @@ const backdrop = "data:image/svg+xml," + encodeURIComponent(
 | React | [`demo/react/demo/App.tsx`](demo/react/demo/App.tsx) | http://127.0.0.1:5175/ |
 | Svelte | [`demo/svelte/demo/App.svelte`](demo/svelte/demo/App.svelte) | http://127.0.0.1:5174/ |
 | Vue | [`demo/vue/demo/App.vue`](demo/vue/demo/App.vue) | http://127.0.0.1:5176/ |
+| Solid | [`demo/solid/demo/App.tsx`](demo/solid/demo/App.tsx) | http://127.0.0.1:5177/ |
 
-The showcase reel uses built-in presets and ordinary RGBA tints; run it from the source above to reproduce the banner. The playground offers the built-in material catalog, shape kinds and environment settings. Its optical values come from the selected preset. The component demos show the same page in each framework, with draggable cards and a `control` lens. Move the lens across sharp backdrop edges to see its built-in color separation. The `standard` and `clear` profiles do not add color separation. Start them with the commands above. Each framework also has `quick-start.html`; `npm run build:demo` includes both pages in `demo-dist/`. The quick starts switch between built-in `standard` and `clear` profiles using a real button inside a `control` surface.
+The showcase reel uses built-in presets and ordinary RGBA tints; run it from the source above to reproduce the banner. The playground offers the built-in material catalog, shape kinds and environment settings. Its optical values come from the selected preset. The React, Svelte and Vue demos show draggable cards and a `control` lens. Move the lens across sharp backdrop edges to see its built-in color separation. The Solid demo shows reactive material and opacity controls with a merged toolbar. The `standard` and `clear` profiles do not add color separation. Each framework also has `quick-start.html`; `npm run build:demo` includes both pages in `demo-dist/`. The quick starts switch between built-in `standard` and `clear` profiles using a real button.
 
 ### Run the repository demos
 
@@ -405,6 +498,10 @@ npm --prefix demo/svelte run demo -- --host 127.0.0.1 --strictPort
 # Vue: http://127.0.0.1:5176/
 npm --prefix demo/vue ci
 npm --prefix demo/vue run demo -- --host 127.0.0.1 --strictPort
+
+# Solid: http://127.0.0.1:5177/
+npm --prefix demo/solid ci
+npm --prefix demo/solid run demo -- --host 127.0.0.1 --strictPort
 ```
 
 Each framework server also provides `/quick-start.html`. These repository commands run local demo sources; the npm commands in [Install](#install) are for adding GlassRender to your own app.
@@ -416,6 +513,7 @@ src/        built-in profile data, core API, catalog and WebGL2 renderer
 demo/react/  glassrender-react and React demo
 demo/svelte/ glassrender-svelte and Svelte demo
 demo/vue/    glassrender-vue and Vue demo
+demo/solid/  glassrender-solid and Solid demo
 examples/   the core playground, the quick start and the assets the demos share
 api.md      the API guide
 ```

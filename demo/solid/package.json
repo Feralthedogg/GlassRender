@@ -1,0 +1,47 @@
+{
+    "name": "glassrender-solid",
+    "version": "0.1.1-beta",
+    "description": "Solid components for the GlassRender glass material renderer.",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Feralthedogg/GlassRender.git",
+        "directory": "demo/solid"
+    },
+    "homepage": "https://github.com/Feralthedogg/GlassRender/tree/main/demo/solid#readme",
+    "bugs": "https://github.com/Feralthedogg/GlassRender/issues",
+    "type": "module",
+    "sideEffects": false,
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "solid": "./dist/index.js",
+            "default": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist",
+        "README.md",
+        "LICENSE"
+    ],
+    "scripts": {
+        "build": "tsc -p tsconfig.build.json",
+        "prepack": "npm run build",
+        "check": "tsc -p tsconfig.json --noEmit",
+        "demo": "vite --config vite.config.js",
+        "build:demo": "vite build --config vite.config.js"
+    },
+    "peerDependencies": {
+        "glassrender": "^0.1.1-beta",
+        "solid-js": "^1.9.0"
+    },
+    "devDependencies": {
+        "glassrender": "file:../..",
+        "solid-js": "^1.9.17",
+        "typescript": "^6.0.3",
+        "vite": "^8.3.2",
+        "vite-plugin-solid": "^2.11.14"
+    }
+}

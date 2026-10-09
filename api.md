@@ -1,8 +1,8 @@
 # GlassRender API Guide
 
-GlassRender renders glass material presets over an image, canvas or video using WebGL2. This guide covers `glassrender` 0.1.1 Beta and its React, Svelte and Vue adapters, all at version `0.1.1-beta`. Select one of the 28 presets with the `preset` option.
+GlassRender renders glass material presets over an image, canvas or video using WebGL2. This guide covers `glassrender` 0.1.1 Beta and its React, Svelte, Vue and Solid adapters, all at version `0.1.1-beta`. Select one of the 28 presets with the `preset` option.
 
-To get started, create a canvas with `createGlass()` and add a piece of glass with `glass.add()`. In a React, Svelte or Vue app, place `Glass` components inside `GlassCanvas`. The components follow their DOM boxes, so you do not have to calculate their positions and sizes yourself.
+To get started, create a canvas with `createGlass()` and add a piece of glass with `glass.add()`. In a React, Svelte, Vue or Solid app, place `Glass` components inside `GlassCanvas`. The components follow their DOM boxes, so you do not have to calculate their positions and sizes yourself.
 
 Jump to the section you need:
 
@@ -324,7 +324,7 @@ lens.set({ chromaticAberration: null }); // now follows 0.2
 
 Read `glass.chromaticAberration` for the canvas default or `lens.chromaticAberration` for the item's effective value. `createGlass(canvas, { chromaticAberration: 0.2 })` sets the initial default. `DEFAULT_CHROMATIC_ABERRATION` is exported from `glassrender/core`, the root entry, and `glassrender/advanced`.
 
-The React, Svelte and Vue adapters expose the same property on `GlassCanvas`, `Glass` and `GlassGroup`. A group owns its material, so its members inherit the group setting.
+The React, Svelte, Vue and Solid adapters expose the same property on `GlassCanvas`, `Glass` and `GlassGroup`. A group owns its material, so its members inherit the group setting.
 
 ```tsx
 <GlassCanvas chromaticAberration={0.2}>
@@ -631,7 +631,7 @@ Unknown names are rejected. An existing item retains its accepted preset on reje
 
 ## React components
 
-`glassrender-react` exports `GlassCanvas`, `Glass`, `GlassGroup` and `useGlass`. Use the following as `App.tsx`. The README's React example covers the app entry point and local package installation.
+`glassrender-react` exports `GlassCanvas`, `Glass`, `GlassGroup` and `useGlass`. Use the following as `App.tsx`. The README's React example covers the app entry point and npm installation.
 
 ```tsx
 import { useState } from "react";
@@ -858,7 +858,34 @@ const state = useGlass();
 
 ## Framework component options
 
-All three adapters use the same roles: `GlassCanvas` manages the canvas and core instance, `Glass` draws within its DOM box, and a `Glass` inside `GlassGroup` becomes a member of that group.
+All four adapters use the same roles: `GlassCanvas` manages the canvas and core instance, `Glass` draws within its DOM box, and a `Glass` inside `GlassGroup` becomes a member of that group.
+
+### Solid
+
+`glassrender-solid` exposes `GlassCanvas`, `Glass`, `GlassGroup`, `useGlass()` and their props types. It uses Solid 1.9 or later and your application's Solid JSX compiler. Install the adapter with `npm install glassrender@beta glassrender-solid@beta`; see the [usage example](README.md#solid).
+
+```tsx
+import { createEffect, createSignal } from "solid-js";
+import { GlassCanvas, Glass, useGlass } from "glassrender-solid";
+
+function Status() {
+    const state = useGlass();
+    createEffect(() => console.log(state?.glass, state?.error));
+    return null;
+}
+
+function Panel() {
+    const [opacity, setOpacity] = createSignal(1);
+    return <GlassCanvas backdrop="/wallpaper.jpg">
+        <Status />
+        <Glass preset="standard" radius={24} opacity={opacity()} style={{ padding: "24px" }}>
+            <button onClick={() => setOpacity(opacity() === 1 ? 0.5 : 1)}>Change opacity</button>
+        </Glass>
+    </GlassCanvas>;
+}
+```
+
+`useGlass()` returns `null` outside `GlassCanvas`. Within it, `glass` is initially `null` and becomes ready after client mount. Its `glass` and `error` properties are reactive getters: keep the state object intact and read them within an effect. Components accept Solid's `class`, `style`, `ref` and DOM event props. `GlassGroup` supplies the material to descendant `Glass` outlines. SSR produces markup; WebGL is initialized only on client mount, and unmount releases shapes, members, pointer listeners and the renderer.
 
 ### GlassCanvas props
 
@@ -880,7 +907,7 @@ All three adapters use the same roles: `GlassCanvas` manages the canvas and core
 | `headroom` | `2` | Legacy display brightness multiplier. |
 | `displayHeadroom` | Omitted | Preferred display multiplier name; takes precedence over `headroom`. |
 | `fixed` | `true` | The canvas covers the viewport; `false` makes it cover the component's area. |
-| Content and styling | Framework syntax | React uses `children`, `className`, `style`; Svelte uses `children`, `class`; Vue uses its default slot and `class`, `style` attributes. |
+| Content and styling | Framework syntax | React uses `children`, `className`, `style`; Svelte uses `children`, `class`; Vue uses its default slot and `class`, `style` attributes; Solid uses `children`, `class`, `style` and `ref`. |
 
 Pass environment settings as individual `GlassCanvas` props. The core API instead groups them under `environment`. Adapters resize automatically. With `fixed: false`, give the container an actual height. Svelte's `GlassCanvas` has no `style` prop, so size it through an outer container or a class, as in the example above.
 
@@ -898,7 +925,7 @@ Pass environment settings as individual `GlassCanvas` props. The core API instea
 
 Put click handlers on the actual button or link inside `Glass`. `interactive` tracks the press without taking pointer capture from the child, and clears the veil on release outside the box, cancellation or window blur.
 
-Mask geometry is chosen when the shape is first created. A group member's `corner` is also chosen at initial attachment; remount the component to change it. React, Svelte and Vue update the follower when `everyFrame` changes, for both shapes and group members. The default radius is half the short side; removing the `radius` prop restores that automatic radius in all three adapters. Set the `radius` prop to change the glass outline; a CSS `border-radius` alone changes only the DOM styling. Low-level shape and member updates can use `radius: null` to restore the automatic radius.
+Mask geometry is chosen when the shape is first created. A group member's `corner` is also chosen at initial attachment; remount the component to change it. React, Svelte, Vue and Solid update the follower when `everyFrame` changes, for both shapes and group members. The default radius is half the short side; removing the `radius` prop restores that automatic radius in all four adapters. Set the `radius` prop to change the glass outline; a CSS `border-radius` alone changes only the DOM styling. Low-level shape and member updates can use `radius: null` to restore the automatic radius.
 
 ### GlassGroup props
 
@@ -1354,7 +1381,7 @@ glass.add(options);
 | CSS backgrounds or HTML do not show through the glass | Supply an image, canvas or video of that scene as the backdrop. DOM content is not captured automatically. |
 | Glass is missing inside a container | With `fixed: false`, check the container's actual width and height. An opaque DOM background can also cover the glass. |
 | The shape is rounder than expected | The default radius is half the short side. Set `radius` explicitly. |
-| Glass is misaligned with its element | Use `follow()` or a framework adapter. For CSS movement animations, set `everyFrame: true`; React, Svelte and Vue support changing this prop after attachment. |
+| Glass is misaligned with its element | Use `follow()` or a framework adapter. For CSS movement animations, set `everyFrame: true`; React, Svelte, Vue and Solid support changing this prop after attachment. |
 | A mask does not work | Check that the mask was supplied at creation, float render targets are supported, and inspect `shape.error` or a `null` result from `group.add()`. |
 | No more members can be added | A group holds at most 16 members, including at most 4 masks. Also check whether the group was removed. |
 | Small glass does not follow backdrop brightness | Check preset support, a short side up to 64, `adaptive` and environment settings. |
