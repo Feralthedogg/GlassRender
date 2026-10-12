@@ -184,9 +184,9 @@ export abstract class Frame extends Tint {
         c[0] = bx0; c[1] = by0; c[2] = bx1; c[3] = by1;
         gl.activeTexture(0x84c1);
         gl.bindTexture(0x0de1, this.source);
-        gl.enable(0x0c11); gl.scissor(bx0, this.extended ? H - by1 : by0, bx1 - bx0, by1 - by0);
+        this.clipTo(bx0, this.extended ? H - by1 : by0, bx1 - bx0, by1 - by0);
         this.begin();
-        gl.disable(0x0c11);
+        this.clipOff();
         gl.activeTexture(0x84c0);
         const sq = this.seq, ds = this.dstart, nd = this.depths;
         for (let d = 0; d < nd; d++) {
@@ -202,9 +202,9 @@ export abstract class Frame extends Tint {
             gl.bindVertexArray(this.vao);
             gl.bindFramebuffer(0x8d40, this.sceneFbo);
             gl.viewport(0, 0, W, H);
-            gl.enable(0x0c11); gl.scissor(bx0, this.extended ? H - by1 : by0, bx1 - bx0, by1 - by0);
+            this.clipTo(bx0, this.extended ? H - by1 : by0, bx1 - bx0, by1 - by0);
             this.drawDepth(start, end, true);
-            gl.disable(0x0c11);
+            this.clipOff();
             if (d + 1 < nd) this.keepDepth(start, end);
         }
     }
@@ -391,7 +391,7 @@ export abstract class Frame extends Tint {
         dt = dt < 0 ? 0 : dt > 0.1 ? 0.1 : dt;
         this.lastTime = t;
         gl.bindBufferBase(0x8a11, 1, this.frameUbo);
-        gl.disable(0x0be2); gl.disable(0x0b71); gl.disable(0x0c11); gl.disable(0x0b44);
+        gl.disable(0x0be2); gl.disable(0x0b71); gl.disable(0x0b44); this.clipOff();
         // readings and transitions first: they change materials and frames, and the layout follows the frames
         let busy = this.poll();
         if (this.animate(dt)) busy = true;

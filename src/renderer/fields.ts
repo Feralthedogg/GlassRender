@@ -62,7 +62,7 @@ export abstract class Fields extends Shapes {
         gl.texParameteri(0x0de1, 0x2801, 0x2703); gl.texParameteri(0x0de1, 0x2800, 0x2601);
         gl.texParameteri(0x0de1, 0x2802, 0x812f); gl.texParameteri(0x0de1, 0x2803, 0x812f);
         gl.bindFramebuffer(0x8d40, fbo); gl.framebufferTexture2D(0x8d40, 0x8ce0, 0x0de1, t, 0);
-        gl.disable(0x0be2); gl.disable(0x0b71); gl.disable(0x0c11); gl.disable(0x0b44);
+        gl.disable(0x0be2); gl.disable(0x0b71); gl.disable(0x0b44); this.clipOff();
         gl.viewport(0, 0, w, h); gl.bindVertexArray(this.vao); gl.useProgram(this.kit[5] as WebGLProgram | null);
         gl.drawArrays(4, 0, 3);
         gl.generateMipmap(0x0de1);

@@ -108,6 +108,9 @@ export abstract class State {
     protected drect: Float32Array;
     // Scissor box of a partial frame (pixels, y up) and whether the next frame must redraw everything.
     protected readonly clip: Float32Array;
+    // The scissor test as last set through clipTo/clipOff, so passes restore it without asking the context.
+    protected readonly scissorBox: Int32Array;
+    protected scissorOn: boolean;
     protected full: boolean;
     protected dstart: Int32Array;
     protected pend: Int32Array;
@@ -242,6 +245,8 @@ export abstract class State {
         this.shown = new Float32Array(4 * 16);
         this.drect = new Float32Array(4 * 32);
         this.clip = new Float32Array(4);
+        this.scissorBox = new Int32Array(4);
+        this.scissorOn = false;
         this.full = true;
         this.dstart = new Int32Array(18);
         this.pend = new Int32Array(16);
@@ -314,6 +319,27 @@ export abstract class State {
         this.down = sh.down; this.downS = sh.downS; this.luma = sh.luma; this.lumaW = sh.lumaW;
         this.lumaTex = sh.lumaTex; this.lumaFbo = sh.lumaFbo;
         this.halfFloat = sh.halfFloat; this.parallel = sh.parallel;
+    }
+
+    // Scissor to a box (GL window coordinates) and remember it.
+    protected clipTo(x: number, y: number, w: number, h: number): void {
+        const b = this.scissorBox;
+        b[0] = x; b[1] = y; b[2] = w; b[3] = h;
+        this.scissorOn = true;
+        this.gl.enable(0x0c11); this.gl.scissor(x, y, w, h);
+    }
+
+    // Turn the scissor test off and remember it.
+    protected clipOff(): void {
+        this.scissorOn = false;
+        this.gl.disable(0x0c11);
+    }
+
+    // Set the scissor test back to what clipTo/clipOff last set, after a pass changed it on its own.
+    protected clipBack(): void {
+        const b = this.scissorBox;
+        if (this.scissorOn) { this.gl.enable(0x0c11); this.gl.scissor(b[0] as number, b[1] as number, b[2] as number, b[3] as number); }
+        else this.gl.disable(0x0c11);
     }
 
     protected take(): number {

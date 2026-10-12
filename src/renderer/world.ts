@@ -60,10 +60,10 @@ export abstract class World extends Tone {
         return true;
     }
 
+    // Draw a box body through the world surface. The caller has the base vertex array bound, which this binds again.
     protected drawWorldBody(slot: number, program: WebGLProgram): boolean {
         const gl = this.gl;
         if (this.worldLocation(program) === null) return false;
-        const prior = gl.getParameter(gl.VERTEX_ARRAY_BINDING) as WebGLVertexArrayObject | null;
         if (!this.openWorldMesh()) return true;
         const d = this.blocks, o = slot * this.stride + ROW_GRID * 4, g = slot * G, geo = this.geo, s = this.scale;
         const cx = (geo[g] as number) + (geo[g + 2] as number) * .5;
@@ -77,18 +77,18 @@ export abstract class World extends Tone {
         }
         gl.bindVertexArray(this.worldVao); gl.bindBuffer(gl.ARRAY_BUFFER, this.worldVbo); gl.bufferSubData(gl.ARRAY_BUFFER, 0, v);
         this.drawWorld(program, this.worldVao, v, 8);
-        gl.bindVertexArray(prior);
         return true;
     }
 
+    /*
+     * Draw through the world surface into the scene (`sceneFbo`, the group surface while a group layer is drawn), which
+     * the caller has bound over the full viewport with the scissor of clipTo/clipOff. Leaves that state and the base
+     * vertex array bound.
+     */
     protected drawWorld(program: WebGLProgram, vao: WebGLVertexArrayObject | null, vertices: Float32Array, stride: number, indexOffset = -1, rimMode?: WebGLUniformLocation | null, sideCount = 24, indexCount = 24): void {
-        const gl = this.gl, w = this.width, h = this.height;
+        const gl = this.gl, w = this.width, h = this.height, target = this.sceneFbo;
         const location = this.worldLocation(program);
         if (location === null) return;
-        const read = gl.getParameter(gl.READ_FRAMEBUFFER_BINDING) as WebGLFramebuffer | null;
-        const draw = gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING) as WebGLFramebuffer | null;
-        const viewport = gl.getParameter(gl.VIEWPORT) as Int32Array, priorVao = gl.getParameter(gl.VERTEX_ARRAY_BINDING) as WebGLVertexArrayObject | null;
-        const scissored = gl.isEnabled(gl.SCISSOR_TEST), scissor = gl.getParameter(gl.SCISSOR_BOX) as Int32Array;
         let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
         for (let i = 0; i < vertices.length; i += stride) {
             const x = vertices[i] as number, y = vertices[i + 1] as number;
@@ -96,13 +96,14 @@ export abstract class World extends Tone {
         }
         x0 = Math.max(0, Math.floor(x0) - 1); y0 = Math.max(0, Math.floor(y0) - 1);
         x1 = Math.min(w, Math.ceil(x1) + 1); y1 = Math.min(h, Math.ceil(y1) + 1);
-        if (scissored) {
-            x0 = Math.max(x0, scissor[0] as number); x1 = Math.min(x1, (scissor[0] as number) + (scissor[2] as number));
-            y0 = Math.max(y0, h - (scissor[1] as number) - (scissor[3] as number)); y1 = Math.min(y1, h - (scissor[1] as number));
+        if (this.scissorOn) {
+            const sb = this.scissorBox;
+            x0 = Math.max(x0, sb[0] as number); x1 = Math.min(x1, (sb[0] as number) + (sb[2] as number));
+            y0 = Math.max(y0, h - (sb[1] as number) - (sb[3] as number)); y1 = Math.min(y1, h - (sb[1] as number));
         }
-        try {
-            if (!(x1 > x0 && y1 > y0) || !this.openWorldSurface()) return;
-            gl.disable(gl.SCISSOR_TEST); gl.bindFramebuffer(gl.READ_FRAMEBUFFER, draw); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.worldFbo);
+        if (!(x1 > x0 && y1 > y0)) return;
+        if (this.openWorldSurface()) {
+            gl.disable(gl.SCISSOR_TEST); gl.bindFramebuffer(gl.READ_FRAMEBUFFER, target); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.worldFbo);
             gl.blitFramebuffer(x0, h-y1, x1, h-y0, x0, y1, x1, y0, gl.COLOR_BUFFER_BIT, gl.NEAREST);
             gl.bindFramebuffer(gl.FRAMEBUFFER, this.worldFbo); gl.viewport(0, 0, w, h);
             gl.enable(gl.SCISSOR_TEST); gl.scissor(x0, y0, x1-x0, y1-y0); gl.bindVertexArray(vao); gl.useProgram(program);
@@ -114,13 +115,10 @@ export abstract class World extends Tone {
                 gl.uniform1i(rimMode, 4); gl.drawElements(gl.TRIANGLES, 24, gl.UNSIGNED_SHORT, indexOffset);
                 gl.uniform1i(rimMode, 0); gl.drawElements(gl.TRIANGLES, sideCount, gl.UNSIGNED_SHORT, indexOffset + 48);
             }
-            gl.disable(gl.SCISSOR_TEST); gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.worldFbo); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, draw);
+            gl.disable(gl.SCISSOR_TEST); gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.worldFbo); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, target);
             gl.blitFramebuffer(x0, y0, x1, y1, x0, h-y0, x1, h-y1, gl.COLOR_BUFFER_BIT, gl.NEAREST);
-        } finally {
-            gl.bindFramebuffer(gl.READ_FRAMEBUFFER, read); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, draw);
-            gl.viewport(viewport[0] as number, viewport[1] as number, viewport[2] as number, viewport[3] as number); gl.bindVertexArray(priorVao);
-            if (scissored) { gl.enable(gl.SCISSOR_TEST); gl.scissor(scissor[0] as number, scissor[1] as number, scissor[2] as number, scissor[3] as number); }
-            else gl.disable(gl.SCISSOR_TEST);
         }
+        gl.bindFramebuffer(gl.FRAMEBUFFER, target); gl.viewport(0, 0, w, h); gl.bindVertexArray(this.vao);
+        this.clipBack();
     }
 }
