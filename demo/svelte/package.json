@@ -2,6 +2,25 @@
     "name": "glassrender-svelte",
     "version": "0.1.1-beta",
     "description": "Svelte components for the GlassRender glass material renderer.",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Feralthedogg/GlassRender.git",
+        "directory": "demo/svelte"
+    },
+    "homepage": "https://github.com/Feralthedogg/GlassRender/tree/main/demo/svelte#readme",
+    "bugs": "https://github.com/Feralthedogg/GlassRender/issues",
+    "keywords": [
+        "svelte",
+        "svelte5",
+        "webgl2",
+        "glass",
+        "refraction",
+        "blur",
+        "material",
+        "shader",
+        "renderer"
+    ],
     "type": "module",
     "sideEffects": false,
     "svelte": "./dist/index.js",
@@ -15,7 +34,8 @@
     },
     "files": [
         "dist",
-        "README.md"
+        "README.md",
+        "LICENSE"
     ],
     "scripts": {
         "package": "svelte-package -i src/lib -o dist",
