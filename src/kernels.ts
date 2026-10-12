@@ -773,35 +773,72 @@ export function glassFragment(key: number, edr = false, hdr = false, blend = fal
     return s + PRELUDE + BODY;
 }
 
+/*
+ * The programs below are cut from the glass program and patched at known pieces of its text. A piece that is not there
+ * gives a source that fails to compile with a log naming the piece, instead of a program that compiles and draws
+ * something else.
+ */
+const BROKEN = "#version 300 es\n#error shader piece not found: ";
+
+/** @brief A source that fails to compile and names the missing piece. */
+function missing(piece: string): string {
+    return BROKEN + piece.replace(/[^A-Za-z0-9 .,;:=+*\/()[\]<>-]/g, " ").slice(0, 80) + "\n";
+}
+
+// Where `piece` starts in `source` at or after `from`, or -1 (also when `from` is -1: an earlier piece is missing).
+function find(source: string, piece: string, from: number): number {
+    return from < 0 ? -1 : source.indexOf(piece, from);
+}
+
+/** @brief `source` with its first `piece` replaced by `by`, or a source naming the piece when it is missing. */
+export function patch(source: string, piece: string, by: string): string {
+    if (source.startsWith(BROKEN)) return source;
+    const at = source.indexOf(piece);
+    return at < 0 ? missing(piece) : source.slice(0, at) + by + source.slice(at + piece.length);
+}
+
+/** @brief `source` with every `piece` replaced by `by`, or a source naming the piece when there is none. */
+export function patchAll(source: string, piece: string, by: string): string {
+    if (source.startsWith(BROKEN)) return source;
+    return source.includes(piece) ? source.split(piece).join(by) : missing(piece);
+}
+
+/** @brief Whether a source built here lost a piece it is cut or patched at. */
+export function brokenSource(source: string): boolean {
+    return source.startsWith(BROKEN);
+}
+
 /** Rim on the current opaque scene. Geometry and light helpers share the shape feature specialization. */
 export function rimFragment(key: number, edr = false, hdr = false, worldY = false): string {
-    const full = glassFragment(key | FEATURE_LIGHTS, edr, hdr, false, true), main = full.indexOf("void main(){");
-    const geometryStart = full.indexOf("#ifdef GRID", full.indexOf("vec2 n=vec2(0.);float d=0.;", main));
-    const geometryEnd = full.indexOf("n=h2(n);RC=", geometryStart);
-    const lightStart = full.indexOf("// depth of the rim bands and its derivative", main);
-    const lightEnd = full.indexOf("#ifdef EDGE", lightStart);
-    const colourStart = full.indexOf("if(bright){float kv=", lightEnd);
-    const colourEnd = full.indexOf("\n#endif\n#ifdef VEIL", colourStart);
+    const full = glassFragment(key | FEATURE_LIGHTS, edr, hdr, false, true), main = find(full, "void main(){", 0);
+    const geometryStart = find(full, "#ifdef GRID", find(full, "vec2 n=vec2(0.);float d=0.;", main));
+    const geometryEnd = find(full, "n=h2(n);RC=", geometryStart);
+    const lightStart = find(full, "// depth of the rim bands and its derivative", main);
+    const lightEnd = find(full, "#ifdef EDGE", lightStart);
+    const colourStart = find(full, "if(bright){float kv=", lightEnd);
+    const colourEnd = find(full, "\n#endif\n#ifdef VEIL", colourStart);
+    if (geometryEnd < 0) return missing("rim geometry: main, n=vec2(0.), #ifdef GRID or n=h2(n);RC=");
+    if (colourEnd < 0) return missing("rim light: band depth comment, #ifdef EDGE, if(bright) or #ifdef VEIL");
     const destination = worldY ? "ivec2(gl_FragCoord.x,f[2].y-gl_FragCoord.y)" : "ivec2(gl_FragCoord.xy)";
     let source = [full.slice(0, main), "uniform highp sampler2D uD;void main(){vec2 px=gl_FragCoord.xy;" + (worldY ? "" : "px.y=f[2].y-px.y;"),
         "#ifdef GROUP\nvec2 q=px*f[0].y;\n#else\nvec2 q=vQ;\n#endif\nvec2 n=vec2(0.);float d=0.;",
         full.slice(geometryStart, geometryEnd), "n=h2(n);\n#ifdef LIGHTS", full.slice(lightStart, lightEnd),
         "if(!bright)discard;vec3 c=texelFetch(uD," + destination + ",0).rgb;",
-        full.slice(colourStart, colourEnd).replaceAll("store(", "h3("), "o=vec4(c,1.);}"].join("\n");
-    source = source.replace("hf(dot(n,n))", "hf(hf(n.x*n.x)+n.y*n.y)");
-    source = source.replace("float lobe=hf(sat((pj-cs)/max(hf(1.-cs),hf(.000100017))));",
+        patchAll(full.slice(colourStart, colourEnd), "store(", "h3("), "o=vec4(c,1.);}"].join("\n");
+    source = patch(source, "hf(dot(n,n))", "hf(hf(n.x*n.x)+n.y*n.y)");
+    source = patch(source, "float lobe=hf(sat((pj-cs)/max(hf(1.-cs),hf(.000100017))));",
         "float lobe=hf(sat(hf(pj-cs)/max(hf(1.-cs),hf(.000100017))));");
-    // Keep the measured fixed-image rim product order through Float32 stores at half midpoints.
-    source = source.replace("return hf(sat(e/fe+.5)*mix(u<1.?1.:0.,1.-u,cv)*sat((h-e)/fe+.5)*lobe);",
+    // Keep the measured rim product order of the separate rim pass through Float32 stores at half midpoints.
+    source = patch(source, "return hf(sat(e/fe+.5)*mix(u<1.?1.:0.,1.-u,cv)*sat((h-e)/fe+.5)*lobe);",
         "float value=floatBoundary(sat(e/fe+.5)*lobe);value=floatBoundary(value*mix(u<1.?1.:0.,1.-u,cv));"
         + "return hf(floatBoundary(value*sat((h-e)/fe+.5)));");
-    // Generic blend43 clamps after both half alpha weights and an unpremultiply.
-    source = source.replace("float a=hf(sat(hf(v.a))*hf(h));",
+    // The separate rim blend clamps after both half alpha weights and an unpremultiply.
+    source = patch(source, "float a=hf(sat(hf(v.a))*hf(h));",
         "float matrixAlpha=hf(sat(hf(v.a)));vec3 weighted=h3(v.rgb*matrixAlpha);"
         + "float a=hf(matrixAlpha*hf(h));weighted=h3(weighted*hf(h));"
         + "v.rgb=h3(weighted/max(a,hf(.000100017)));");
     for (const axis of ["x", "y", "z"]) {
-        source = source.replace("h4(v+c." + axis + "*vec4(r0." + axis + ",r1." + axis + ",r2." + axis + ",r3." + axis + "))",
+        source = patch(source, "h4(v+c." + axis + "*vec4(r0." + axis + ",r1." + axis + ",r2." + axis + ",r3." + axis + "))",
             "halfFMA4(vec4(r0." + axis + ",r1." + axis + ",r2." + axis + ",r3." + axis + "),c." + axis + ",v)");
     }
     return source;
@@ -809,15 +846,17 @@ export function rimFragment(key: number, edr = false, hdr = false, worldY = fals
 
 /** Background source RGBA on a transparent group, before any foreground layer or rim. */
 export function groupBodyFragment(key: number, edr = false, hdr = false, worldY = false): string {
-    return glassFragment(key & ~FEATURE_LIGHTS, edr, hdr, false, true, worldY, false)
-        .replace("if(cov>0.||hl>.000100017", "o=r;return;if(cov>0.||hl>.000100017");
+    return patch(glassFragment(key & ~FEATURE_LIGHTS, edr, hdr, false, true, worldY, false),
+        "if(cov>0.||hl>.000100017", "o=r;return;if(cov>0.||hl>.000100017");
 }
 
 /** Premultiplied rim over group RGBA; native matrices keep the destination alpha column. */
 export function groupRimFragment(key: number, edr = false, hdr = false, worldY = false): string {
     let source = rimFragment(key, edr, hdr, worldY);
-    const start = source.indexOf("vec3 rim(vec3 c,float h,"), tail = "return h3(h3(k*a)+c*hf(1.-a));}";
-    const end = source.indexOf(tail, start);
+    if (brokenSource(source)) return source;
+    const start = find(source, "vec3 rim(vec3 c,float h,", 0), tail = "return h3(h3(k*a)+c*hf(1.-a));}";
+    const end = find(source, tail, start);
+    if (end < 0) return missing("group rim: vec3 rim(vec3 c,float h, or its return");
     const rim = `vec4 rim(vec4 destination,float h,vec4 r0,vec4 r1,vec4 r2,vec4 r3){
 vec3 straight=h3(destination.rgb/max(destination.a,hf(.000100017)));
 vec4 v=matrix4(straight,r0,r1,r2,r3);v.a=hf(v.a*destination.a);
@@ -831,18 +870,19 @@ rgb=clamp(rgb,-.75,${RA}.z);
 p=h4(vec4(h3(rgb*p.a),p.a));return halfFMA4(destination,hf(1.-p.a),p);}`;
     source = source.slice(0, start) + rim + source.slice(end + tail.length);
     const destination = worldY ? "ivec2(gl_FragCoord.x,f[2].y-gl_FragCoord.y)" : "ivec2(gl_FragCoord.xy)";
-    return source.replace("vec3 c=texelFetch(uD," + destination + ",0).rgb;", "vec4 c=texelFetch(uD," + destination + ",0);")
-        .replaceAll("c=h3(c*hf(", "c.rgb=h3(c.rgb*hf(").replaceAll("c=h3(rim(c,", "c=h4(rim(c,")
-        .replace("o=vec4(c,1.);}", "o=vec4(c.rgb,hf(sat(c.a)));}");
+    source = patch(source, "vec3 c=texelFetch(uD," + destination + ",0).rgb;", "vec4 c=texelFetch(uD," + destination + ",0);");
+    source = patchAll(patchAll(source, "c=h3(c*hf(", "c.rgb=h3(c.rgb*hf("), "c=h3(rim(c,", "c=h4(rim(c,");
+    return patch(source, "o=vec4(c,1.);}", "o=vec4(c.rgb,hf(sat(c.a)));}");
 }
 
-export const GROUP_VERTEX = FULL_VERTEX.replace("void main(){", "out vec2 vQ;out vec2 vU;flat out int vMode;void main(){vQ=vec2(0.);vU=vec2(0.);vMode=0;");
+export const GROUP_VERTEX = patch(FULL_VERTEX, "void main(){", "out vec2 vQ;out vec2 vU;flat out int vMode;void main(){vQ=vec2(0.);vU=vec2(0.);vMode=0;");
 
-/** Texture60 SDF fill coverage. Its scalar output also supplies an opaque white mask. */
+/** SDF fill coverage of the separate tint pass. Its scalar output also supplies an opaque white mask. */
 export function sdfFillMaskFragment(key: number): string {
-    const full = glassFragment(key), main = full.indexOf("void main(){");
-    const geometryStart = full.indexOf("#ifdef GRID", full.indexOf("vec2 n=vec2(0.);float d=0.;", main));
-    const geometryEnd = full.indexOf("n=h2(n);RC=", geometryStart);
+    const full = glassFragment(key), main = find(full, "void main(){", 0);
+    const geometryStart = find(full, "#ifdef GRID", find(full, "vec2 n=vec2(0.);float d=0.;", main));
+    const geometryEnd = find(full, "n=h2(n);RC=", geometryStart);
+    if (geometryEnd < 0) return missing("fill geometry: main, n=vec2(0.), #ifdef GRID or n=h2(n);RC=");
     return full.slice(0, main) + "uniform float uOffset;void main(){vec2 q=vQ,n=vec2(0.);float d=0.;"
         + "RC=" + CL + ".xy;RS=" + CL + ".zw-" + CL + ".xy;\n"
         + full.slice(geometryStart, geometryEnd) + "\n"
@@ -852,11 +892,10 @@ export function sdfFillMaskFragment(key: number): string {
 
 /** Independent foreground output using the same tint operation as the public body path. */
 export function tintForegroundFragment(key: number, separateMask = true, compositeBackdrop = false, nativeFillRows = false): string {
-    const full = sdfFillMaskFragment(key | FEATURE_TINT);
-    return full.replace("uniform float uOffset;", "uniform float uOffset;uniform highp sampler2D uTintBackdrop;uniform vec2 uTintOrigin;"
+    const full = patch(sdfFillMaskFragment(key | FEATURE_TINT), "uniform float uOffset;", "uniform float uOffset;uniform highp sampler2D uTintBackdrop;uniform vec2 uTintOrigin;"
             + (separateMask ? "uniform highp sampler2D uTintFill;uniform vec2 uTintFillOrigin;uniform vec2 uTintFillSize;" : "")
-            + (compositeBackdrop ? "uniform highp sampler2D uTintUnderlying;" : ""))
-        .replace("o=vec4(alpha);}", "vec2 pixel=gl_FragCoord.xy+uTintOrigin;"
+            + (compositeBackdrop ? "uniform highp sampler2D uTintUnderlying;" : ""));
+    return patch(full, "o=vec4(alpha);}", "vec2 pixel=gl_FragCoord.xy+uTintOrigin;"
             + "vec4 backdrop=texelFetch(uTintBackdrop,ivec2(pixel),0);"
             + (compositeBackdrop ? "backdrop=halfFMA4(texelFetch(uTintUnderlying,ivec2(pixel),0),hf(1.-backdrop.a),backdrop);backdrop.a=hf(sat(backdrop.a));" : "")
             + "float edge=10.-d,coverage=hf(sat(edge/clamp(fwidth(edge),.0001,1.)+.5));"
@@ -866,7 +905,8 @@ export function tintForegroundFragment(key: number, separateMask = true, composi
 
 /** Complete an independently generated foreground over the current opaque scene. */
 export function tintCompositeFragment(premultiplied = false): string {
-    const source=glassFragment(0), main=source.indexOf("void main(){");
+    const source=glassFragment(0), main=find(source,"void main(){",0);
+    if(main<0)return missing("void main(){");
     return source.slice(0,main)+`uniform highp sampler2D uTintForeground;uniform highp sampler2D uD;uniform vec2 uTintOrigin;
 void main(){ivec2 p=ivec2(gl_FragCoord.xy);vec4 foreground=texelFetch(uTintForeground,ivec2(gl_FragCoord.xy-uTintOrigin),0);
 o=halfFMA4(texelFetch(uD,p,0),hf(1.-foreground.a),foreground);${premultiplied ? "o.a=hf(sat(o.a));" : "o.a=1.;"}}`;
@@ -874,7 +914,8 @@ o=halfFMA4(texelFetch(uD,p,0),hf(1.-foreground.a),foreground);${premultiplied ? 
 
 /** Generic/MRT keeps the source alpha store; explicit fixed-kernel controls may fuse its inverse. */
 export function groupCompositeFragment(fusedInverse = false): string {
-    const source = glassFragment(0), start = source.indexOf("void main(){");
+    const source = glassFragment(0), start = find(source, "void main(){", 0);
+    if (start < 0) return missing("void main(){");
     return source.slice(0, start) + `uniform highp sampler2D uG;uniform highp sampler2D uD;uniform float uOpacity;
 void main(){ivec2 p=ivec2(gl_FragCoord.xy);vec4 group=texelFetch(uG,p,0);if(group.a==0.)discard;
 float weight=hf(uOpacity);vec4 src=h4(group*weight),before=texelFetch(uD,p,0);
