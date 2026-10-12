@@ -88,12 +88,11 @@ export class GlassShape extends GlassItem {
     }
 
     /**
-     * @brief Take the frame from an element's box, now and whenever the element is resized or the
-     * page scrolls.
+     * @brief Take the frame from an element's box, now and whenever the layout may have moved it:
+     * resizes, scrolling, DOM changes, image and font loads, and CSS transitions.
      * @details The element gets the colors for content on this glass as the custom properties
      * `--glass-foreground` and `--glass-title`.
-     * @param everyFrame Measure it on every frame as well (for elements moved by CSS animations or
-     * transforms).
+     * @param everyFrame Measure it on every frame as well (for elements moved by CSS animations).
      */
     follow(element: Element, everyFrame = false): this {
         if (this.removed) return this;

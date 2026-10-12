@@ -55,7 +55,7 @@
         /** @brief How visibility changes and removal look (default "materialize"). */
         transition?: Transition;
         /**
-         * @brief Measure the box on every frame (for boxes moved by CSS animations or transforms).
+         * @brief Measure the box on every frame (for boxes moved by CSS animations; DOM changes and transitions are followed without it).
          */
         everyFrame?: boolean;
         children?: Snippet;

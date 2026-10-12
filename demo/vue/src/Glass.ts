@@ -67,7 +67,7 @@ export const Glass = defineComponent({
         /** @brief How visibility changes and removal look (default "materialize"). */
         transition: { type: String as PropType<Transition>, default: "materialize" },
         /**
-         * @brief Measure the box on every frame (for boxes moved by CSS animations or transforms).
+         * @brief Measure the box on every frame (for boxes moved by CSS animations; DOM changes and transitions are followed without it).
          */
         everyFrame: { type: Boolean, default: false }
     },

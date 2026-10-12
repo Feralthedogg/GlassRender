@@ -379,7 +379,7 @@ element.addEventListener("lostpointercapture", release);
 
 Followed elements receive the CSS custom properties `--glass-foreground` and `--glass-title`. Use `color: var(--glass-foreground)` for ordinary content and `color: var(--glass-title)` for a control title. Unfollowing or removing the glass clears these properties.
 
-For elements moving through CSS animations or transforms, use `follow(element, true)` to measure on every frame. The measurement uses the element's axis-aligned bounding box; it does not reproduce a rotated outline.
+A followed element is measured again after resizes, scrolling, DOM changes, image and font loads, and while CSS transitions run, so content that moves it without resizing it keeps the glass in place. For elements moving through CSS animations, use `follow(element, true)` to measure on every frame. The measurement uses the element's axis-aligned bounding box; it does not reproduce a rotated outline.
 
 ## All presets
 

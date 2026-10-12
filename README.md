@@ -233,7 +233,7 @@ For plain HTML without a bundler, use a pinned CDN import inside `<script type="
 import { createGlass } from "https://cdn.jsdelivr.net/npm/glassrender@0.1.1-beta/dist/core.js";
 ```
 
-Serve the page over HTTP and provide a backdrop image, canvas or video. `follow(element)` tracks layout changes; `follow(element, true)` also tracks CSS animation. Call `glass.destroy()` when your app removes the scene. The complete browser example above uses the same core API.
+Serve the page over HTTP and provide a backdrop image, canvas or video. `follow(element)` measures the element again after resizes, scrolling, DOM changes, image and font loads and CSS transitions; `follow(element, true)` also measures it on every frame for CSS animations. Call `glass.destroy()` when your app removes the scene. The complete browser example above uses the same core API.
 
 ## Frameworks
 
