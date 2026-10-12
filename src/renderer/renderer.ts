@@ -13,7 +13,7 @@ import {
     A, ADAPT_LIVE, ADAPT_OFF, F, G, GEOM_BOX, GEOM_FIELD, GEOM_UNEVEN, GEOM_UNION, MATERIAL_DARK, MATERIAL_LIGHT, MAXP,
     MB, MMF, R, RGBA16F, RGBA8
 } from "./lanes.js";
-import { LAST_ERROR, openShared, type Shared } from "./shared.js";
+import { dropLink, LAST_ERROR, openShared, type Shared } from "./shared.js";
 import { Frame } from "./frame.js";
 import { displayHeadroom, edrFactor, hdrScaleFits, resolveDisplayHeadroom, surfaceFactor, type DisplayBrightness } from "../hdr.js";
 
@@ -57,7 +57,7 @@ export class Renderer extends Frame {
         const gl = this.gl;
         if (gl.isContextLost()) return err("the context is still lost");
         // Lost-context objects are already invalid; clear references without deleting them.
-        this.programs.clear(); this.progs.fill(null); this.kit.fill(null); this.kitLoc.fill(null);
+        this.programs.clear(); this.warming.clear(); this.progs.fill(null); this.kit.fill(null); this.kitLoc.fill(null);
         this.dropRim(false);
         this.dropGroup(false);
         this.dropTintMask(false);
@@ -827,6 +827,8 @@ export class Renderer extends Frame {
         gl.deleteVertexArray(this.vao); gl.deleteVertexArray(this.buildVao); gl.deleteVertexArray(this.lumaVao);
         for (const p of this.programs.values()) gl.deleteProgram(p);
         this.programs.clear();
+        for (const job of this.warming.values()) dropLink(gl, job);
+        this.warming.clear();
         this.progs.fill(null);
     }
 }

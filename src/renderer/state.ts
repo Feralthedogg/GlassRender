@@ -5,7 +5,7 @@
 
 import { BLOCK_FLOATS, DEFAULT_CHROMATIC_ABERRATION, MAX_MEMBERS } from "../layout.js";
 import { A, B, C, F, G, GEN_SHIFT, GEOM_FIELD, GROW, INST, MAXL, MAXP, MB, MMF, R, SLOT_MASK } from "./lanes.js";
-import { type Shared } from "./shared.js";
+import { type LinkJob, type Shared } from "./shared.js";
 
 /** @brief State of a renderer and its slot bookkeeping. */
 export abstract class State {
@@ -38,11 +38,14 @@ export abstract class State {
     protected lumaTex: WebGLTexture;
     protected lumaFbo: WebGLFramebuffer;
     protected halfFloat: boolean;
+    protected parallel: boolean;
     protected readonly frame: Float32Array;
     protected contextScale = 1;
     protected surfaceScale = 1;
     protected surfaceStateFactor = 1;
     protected readonly programs: Map<number, WebGLProgram>;
+    // Links started ahead of use (see `prewarm`), by program cache key.
+    protected readonly warming: Map<number, LinkJob>;
     protected readonly rimPrograms = new Map<number, { program: WebGLProgram; mode: WebGLUniformLocation | null; projection: WebGLUniformLocation | null }>();
     protected rimVao: WebGLVertexArrayObject | null = null;
     protected rimVertexBuffer: WebGLBuffer | null = null;
@@ -177,10 +180,12 @@ export abstract class State {
         this.down = sh.down; this.downS = sh.downS; this.luma = sh.luma; this.lumaW = sh.lumaW;
         this.lumaTex = sh.lumaTex; this.lumaFbo = sh.lumaFbo;
         this.halfFloat = sh.halfFloat;
+        this.parallel = sh.parallel;
         this.frame = new Float32Array(16);
         this.frame[12] = 1; this.frame[13] = 1; this.frame[14] = 1;
         this.frame[2] = 1; this.frame[10] = 1;
         this.programs = new Map<number, WebGLProgram>();
+        this.warming = new Map<number, LinkJob>();
         this.maxTex = maxTex;
         this.strideBytes = strideBytes;
         this.stride = strideBytes >> 2;
@@ -305,7 +310,7 @@ export abstract class State {
         this.first8 = sh.first8; this.first8S = sh.first8S; this.down8 = sh.down8; this.down8S = sh.down8S;
         this.down = sh.down; this.downS = sh.downS; this.luma = sh.luma; this.lumaW = sh.lumaW;
         this.lumaTex = sh.lumaTex; this.lumaFbo = sh.lumaFbo;
-        this.halfFloat = sh.halfFloat;
+        this.halfFloat = sh.halfFloat; this.parallel = sh.parallel;
     }
 
     protected take(): number {

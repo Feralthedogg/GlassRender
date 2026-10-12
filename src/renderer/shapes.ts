@@ -14,7 +14,7 @@ import {
     A, ADAPT_FIRST, ADAPT_LIVE, ADAPT_OFF, B, C, edge, F, FIELD_BITS, FIELD_RANGE, G, GEN_MASK, GEN_SHIFT, GEOM_BOX, GEOM_FIELD, GEOM_UNEVEN, GEOM_UNION,
     MATERIAL_DARK, MAXL, MB, MF, MMF, R
 } from "./lanes.js";
-import { link } from "./shared.js";
+import { finishLink, startLink, type LinkJob } from "./shared.js";
 import { fma32, layerOpacity } from "../precision.js";
 import { vibrantClamp } from "../hdr.js";
 import { tintGradientMask } from "../gradient.js";
@@ -157,6 +157,13 @@ export abstract class Shapes extends State {
             const f = this.feats[slot] as number;
             key = bits | ((bits & FEATURE_FIELD) !== 0 && (bits >>> MEMBER_SHIFT) === 0 ? f & ~FEATURE_ROUND_NORMAL : f);
             p = this.program(key);
+            if (p !== null && this.parallel) {
+                // Programs a later update is likely to need, linked in the background: the tint switched, and the next
+                // size of a union whose size is full.
+                this.prewarm(key ^ FEATURE_TINT);
+                const n = key >>> MEMBER_SHIFT;
+                if (n !== 0 && n < MAX_MEMBERS && this.ucount[slot] === n) this.prewarm((key & ((1 << MEMBER_SHIFT) - 1)) | ((n * 2) << MEMBER_SHIFT));
+            }
         }
         this.keys[slot] = p === null ? -1 : key;
         this.progs[slot] = p;
@@ -371,16 +378,25 @@ export abstract class Shapes extends State {
         return body * 16 + (this.frame[14] !== 1 ? 1 : 0) + (this.frame[15] !== 0 ? 2 : 0) + (this.extended ? 4 : 0) + (this.groupLayer(key) ? 8 : 0);
     }
 
+    // Start linking the program of a cache key.
+    protected startProgram(c: number): LinkJob | null {
+        const body = (c - (c & 15)) / 16, edr = (c & 1) !== 0, hdr = (c & 2) !== 0, blend = (c & 4) !== 0;
+        const grid = (body >>> MEMBER_SHIFT) === 0 && (body & (FEATURE_FIELD | FEATURE_UNEVEN)) === 0;
+        // Keep the measured reflected-vertex context of the normalized HDR profile.
+        const world = blend && grid && !hdr;
+        return startLink(this.gl, world ? worldVertex() : shapeVertex(grid, blend),
+            (c & 8) !== 0 ? groupBodyFragment(body, edr, hdr, world) : glassFragment(body, edr, hdr, blend, blend, world));
+    }
+
     protected program(key: number): WebGLProgram | null {
         const c = this.programKey(key), have = this.programs.get(c);
         if (have !== undefined) return have;
-        const body = (c - (c & 15)) / 16, edr = (c & 1) !== 0, hdr = (c & 2) !== 0, blend = (c & 4) !== 0, members = body >>> MEMBER_SHIFT;
-        const grid = members === 0 && (body & (FEATURE_FIELD | FEATURE_UNEVEN)) === 0;
-        // Keep the measured reflected-vertex context of the normalized HDR profile.
-        const world = blend && grid && !hdr, gl = this.gl;
-        const p = link(gl, world ? worldVertex() : shapeVertex(grid, blend),
-            (c & 8) !== 0 ? groupBodyFragment(body, edr, hdr, world) : glassFragment(body, edr, hdr, blend, blend, world));
+        // A link started ahead (see `prewarm`) is usually done by now; otherwise this waits for it.
+        const job = this.warming.get(c);
+        if (job !== undefined) this.warming.delete(c);
+        const p = finishLink(this.gl, job !== undefined ? job : this.startProgram(c));
         if (p === null) return null;
+        const gl = this.gl, body = (c - (c & 15)) / 16, members = body >>> MEMBER_SHIFT;
         gl.uniformBlockBinding(p, gl.getUniformBlockIndex(p, "M"), 0);
         gl.uniformBlockBinding(p, gl.getUniformBlockIndex(p, "F"), 1);
         if (members !== 0) gl.uniformBlockBinding(p, gl.getUniformBlockIndex(p, "U"), 2);
@@ -396,5 +412,17 @@ export abstract class Shapes extends State {
         }
         this.programs.set(c, p);
         return p;
+    }
+
+    /*
+     * Start linking the program of a key without waiting for it, where the driver links in the background, so a
+     * later update that needs it does not stall the page.
+     */
+    protected prewarm(key: number): void {
+        if (!this.parallel) return;
+        const c = this.programKey(key);
+        if (this.programs.has(c) || this.warming.has(c)) return;
+        const job = this.startProgram(c);
+        if (job !== null) this.warming.set(c, job);
     }
 }

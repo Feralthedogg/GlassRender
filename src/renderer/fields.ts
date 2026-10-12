@@ -6,7 +6,7 @@
 import { MAX_MEMBERS, MEMBER_FIELD } from "../layout.js";
 import { FIELD_BLUR_FRAGMENT, FIELD_DISTANCE_FRAGMENT, FIELD_JUMP_FRAGMENT, FIELD_NORMAL_FRAGMENT, FIELD_SEED_FRAGMENT, FULL_VERTEX, MASK_COPY_FRAGMENT } from "../kernels.js";
 import { F, FIELD_BITS, FIELD_RANGE, G, GEOM_FIELD, GEOM_UNION, MB, MMF, RGBA16F, RGBA8 } from "./lanes.js";
-import { link } from "./shared.js";
+import { finishLink, startLink } from "./shared.js";
 import { Shapes } from "./shapes.js";
 
 /** @brief Distance fields of mask outlines. */
@@ -15,10 +15,12 @@ export abstract class Fields extends Shapes {
     protected openKit(): boolean {
         const gl = this.gl, k = this.kit, l = this.kitLoc;
         if (k[0] !== null) return true;
-        const seed = link(gl, FULL_VERTEX, FIELD_SEED_FRAGMENT), jump = link(gl, FULL_VERTEX, FIELD_JUMP_FRAGMENT);
-        const dist = link(gl, FULL_VERTEX, FIELD_DISTANCE_FRAGMENT), normal = link(gl, FULL_VERTEX, FIELD_NORMAL_FRAGMENT);
-        const blur = link(gl, FULL_VERTEX, FIELD_BLUR_FRAGMENT);
-        const copy = link(gl, FULL_VERTEX, MASK_COPY_FRAGMENT);
+        // Start every link before checking any, so the driver can compile them side by side.
+        const seedJob = startLink(gl, FULL_VERTEX, FIELD_SEED_FRAGMENT), jumpJob = startLink(gl, FULL_VERTEX, FIELD_JUMP_FRAGMENT);
+        const distJob = startLink(gl, FULL_VERTEX, FIELD_DISTANCE_FRAGMENT), normalJob = startLink(gl, FULL_VERTEX, FIELD_NORMAL_FRAGMENT);
+        const blurJob = startLink(gl, FULL_VERTEX, FIELD_BLUR_FRAGMENT), copyJob = startLink(gl, FULL_VERTEX, MASK_COPY_FRAGMENT);
+        const seed = finishLink(gl, seedJob), jump = finishLink(gl, jumpJob), dist = finishLink(gl, distJob);
+        const normal = finishLink(gl, normalJob), blur = finishLink(gl, blurJob), copy = finishLink(gl, copyJob);
         if (seed === null || jump === null || dist === null || normal === null || blur === null || copy === null) {
             gl.deleteProgram(seed); gl.deleteProgram(jump); gl.deleteProgram(dist); gl.deleteProgram(normal); gl.deleteProgram(blur);
             gl.deleteProgram(copy);

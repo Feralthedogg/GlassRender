@@ -49,6 +49,24 @@ export interface Shared {
      * extended-range output).
      */
     readonly halfFloat: boolean;
+    /** @brief Programs link in the background and report when they are done (no wait to start one). */
+    readonly parallel: boolean;
+}
+
+/**
+ * @brief A program whose link was started and not yet checked, with its shaders for the error log.
+ * @internal
+ */
+export class LinkJob {
+    readonly program: WebGLProgram;
+    readonly vertex: WebGLShader;
+    readonly fragment: WebGLShader;
+
+    constructor(program: WebGLProgram, vertex: WebGLShader, fragment: WebGLShader) {
+        this.program = program;
+        this.vertex = vertex;
+        this.fragment = fragment;
+    }
 }
 
 /**
@@ -57,12 +75,20 @@ export interface Shared {
  * @returns The objects, or why they cannot be made.
  */
 export function openShared(gl: WebGL2RenderingContext, lumaCap: number): Shared | string {
-        const halfFloat = gl.getExtension("EXT_color_buffer_float") !== null || gl.getExtension("EXT_color_buffer_half_float") !== null;
-    const present = link(gl, FULL_VERTEX, PRESENT_FRAGMENT), split = link(gl, FULL_VERTEX, SPLIT_FRAGMENT);
-    const capture = link(gl, BUILD_VERTEX, CAPTURE_FRAGMENT), down = link(gl, BUILD_VERTEX, DOWNSAMPLE_FRAGMENT);
-    const first = link(gl, BUILD_VERTEX, FIRST_MIP_FRAGMENT), luma = link(gl, LUMA_VERTEX, LUMA_FRAGMENT);
-    const first8 = link(gl, BUILD_VERTEX, FIRST_MIP_FRAGMENT_8), down8 = link(gl, BUILD_VERTEX, DOWNSAMPLE_FRAGMENT_8);
+    const halfFloat = gl.getExtension("EXT_color_buffer_float") !== null || gl.getExtension("EXT_color_buffer_half_float") !== null;
+    const parallel = gl.getExtension("KHR_parallel_shader_compile") !== null;
+    // Start every link before checking any, so the driver can compile them side by side.
+    const jobs = [startLink(gl, FULL_VERTEX, PRESENT_FRAGMENT), startLink(gl, FULL_VERTEX, SPLIT_FRAGMENT),
+        startLink(gl, BUILD_VERTEX, CAPTURE_FRAGMENT), startLink(gl, BUILD_VERTEX, DOWNSAMPLE_FRAGMENT),
+        startLink(gl, BUILD_VERTEX, FIRST_MIP_FRAGMENT), startLink(gl, LUMA_VERTEX, LUMA_FRAGMENT),
+        startLink(gl, BUILD_VERTEX, FIRST_MIP_FRAGMENT_8), startLink(gl, BUILD_VERTEX, DOWNSAMPLE_FRAGMENT_8)];
+    const present = finishLink(gl, jobs[0] ?? null), split = finishLink(gl, jobs[1] ?? null);
+    const capture = finishLink(gl, jobs[2] ?? null), down = finishLink(gl, jobs[3] ?? null);
+    const first = finishLink(gl, jobs[4] ?? null), luma = finishLink(gl, jobs[5] ?? null);
+    const first8 = finishLink(gl, jobs[6] ?? null), down8 = finishLink(gl, jobs[7] ?? null);
     if (present === null || split === null || capture === null || down === null || first === null || luma === null || first8 === null || down8 === null) {
+        gl.deleteProgram(present); gl.deleteProgram(split); gl.deleteProgram(capture); gl.deleteProgram(down);
+        gl.deleteProgram(first); gl.deleteProgram(luma); gl.deleteProgram(first8); gl.deleteProgram(down8);
         return "pass program failed to compile: " + (LAST_ERROR[0] as string);
     }
     const splitT = gl.getUniformLocation(split, "uT"), captureS = gl.getUniformLocation(capture, "uS");
@@ -113,19 +139,48 @@ export function openShared(gl: WebGL2RenderingContext, lumaCap: number): Shared 
     gl.texImage2D(0x0de1, 0, RGBA8, 1, 1, 0, 0x1908, 0x1401, null);
     return {
         vao, buildVao, lumaVao, ubo, frameUbo, unionUbo, instBuf, lumaBuf, pbo, backdrop, present, split, splitT, capture, captureS, first,
-        firstS, first8, first8S, down8, down8S, down, downS, luma, lumaW, lumaTex, lumaFbo, halfFloat
+        firstS, first8, first8S, down8, down8S, down, downS, luma, lumaW, lumaTex, lumaFbo, halfFloat, parallel
     };
 }
 
+/** @brief Compile and link a program, waiting for the result. */
 export function link(gl: WebGL2RenderingContext, vs: string, fs: string): WebGLProgram | null {
+    return finishLink(gl, startLink(gl, vs, fs));
+}
+
+/**
+ * @brief Compile and link a program without asking for the result, so nothing waits for the
+ * driver yet.
+ */
+export function startLink(gl: WebGL2RenderingContext, vs: string, fs: string): LinkJob | null {
     const v = gl.createShader(0x8b31), f = gl.createShader(0x8b30), p = gl.createProgram() as WebGLProgram | null;
-    if (v === null || f === null || p === null) return null;
+    if (v === null || f === null || p === null) { gl.deleteShader(v); gl.deleteShader(f); gl.deleteProgram(p); return null; }
     gl.shaderSource(v, vs); gl.compileShader(v);
     gl.shaderSource(f, fs); gl.compileShader(f);
     gl.attachShader(p, v); gl.attachShader(p, f); gl.linkProgram(p);
+    return new LinkJob(p, v, f);
+}
+
+/** @brief Whether a started link is done (always true without background linking). */
+export function linkDone(gl: WebGL2RenderingContext, job: LinkJob, parallel: boolean): boolean {
+    return !parallel || gl.getProgramParameter(job.program, 0x91b1) === true;
+}
+
+/**
+ * @brief The program of a started link once it is done (waiting for it if needed), or null with the
+ * log in `LAST_ERROR` when it failed.
+ */
+export function finishLink(gl: WebGL2RenderingContext, job: LinkJob | null): WebGLProgram | null {
+    if (job === null) return null;
+    const p = job.program, v = job.vertex, f = job.fragment;
     const linked = gl.getProgramParameter(p, 0x8b82) === true;
     if (!linked) LAST_ERROR[0] = (gl.getShaderInfoLog(f) ?? "") + (gl.getShaderInfoLog(v) ?? "") + (gl.getProgramInfoLog(p) ?? "");
     gl.detachShader(p, v); gl.detachShader(p, f); gl.deleteShader(v); gl.deleteShader(f);
     if (!linked) { gl.deleteProgram(p); return null; }
     return p;
+}
+
+/** @brief Drop a started link without waiting for it. */
+export function dropLink(gl: WebGL2RenderingContext, job: LinkJob): void {
+    gl.deleteShader(job.vertex); gl.deleteShader(job.fragment); gl.deleteProgram(job.program);
 }

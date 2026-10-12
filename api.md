@@ -1395,6 +1395,7 @@ glass.add(options);
 | Video or canvas updates do not appear | Check `live: true`. With `Renderer`, manage uploads or dirty notifications and frame requests yourself. |
 | Removing a backdrop | `setBackdrop(null)`, `clearBackdrop()` and the component canvas's `backdrop={null}` remove uploaded pixels and retained sources. |
 | Text remains when the glass is hidden | `visible` controls the glass effect. Manage DOM visibility in your app. |
+| The first use of a material pauses briefly | The browser compiles the shaders of each new combination of preset, tint, outline kind and group size the first time it is drawn. Pressing, opacity and adding group members up to the next of 1, 2, 4, 8 and 16 reuse compiled shaders, and where the browser compiles in the background the tinted variant and the next group size are prepared ahead. Show the presets a page needs once at load time (for example hidden) to compile them before interaction. |
 | Many overlapping shapes are slow | `stacking: "flat"` reduces overlap work by making each shape read the original backdrop. Adjust output resolution with `maxPixelRatio`. |
 | Direct renderer changes do not appear | After changing `glass.renderer`, call `glass.update()`. With a standalone `Renderer`, schedule a render frame. |
 | Extended range stays disabled | Check the initial creation option and browser output support, and read the actual return value. |
