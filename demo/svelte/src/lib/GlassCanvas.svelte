@@ -21,7 +21,7 @@
          * @brief Default surroundings of the glass (default "auto": the page's color scheme).
          */
         appearance?: Appearance;
-        /** @brief Glass over glass: "exact" (default) or "flat". */
+        /** @brief Glass over glass: "exact" (default), "overlap" (glass sees only the glass it lies over) or "flat". */
         stacking?: StackingMode;
         /** @brief Turn of the rim lights in radians, clockwise. */
         lightAngle?: number;

@@ -25,7 +25,7 @@ export const GlassCanvas = defineComponent({
          * @brief Default surroundings of the glass (default "auto": the page's color scheme).
          */
         appearance: { type: String as PropType<Appearance>, default: "auto" },
-        /** @brief Glass over glass: "exact" (default) or "flat". */
+        /** @brief Glass over glass: "exact" (default), "overlap" (glass sees only the glass it lies over) or "flat". */
         stacking: { type: String as PropType<StackingMode>, default: "exact" },
         /** @brief Turn of the rim lights in radians, clockwise. */
         lightAngle: { type: Number, default: 0 },

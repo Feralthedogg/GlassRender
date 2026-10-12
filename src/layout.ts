@@ -34,12 +34,15 @@ export interface BackdropPixels {
     readonly rows?: RowOrder;
 }
 /**
- * @brief How shapes over other shapes are drawn: every shape sees the backdrop only, or the glass
- * below it as well.
+ * @brief How shapes over other shapes are drawn: every shape sees the backdrop only, the glass below
+ * it as well, or only the glass and shadows its body covers.
+ * @details `STACKING_OVERLAP` skips lower glass that its blur or refraction reaches without the
+ * shape lying over it, which removes most of the capture passes of glass laid side by side.
  */
 export const STACKING_FLAT = 0;
 export const STACKING_EXACT = 1;
-export type Stacking = 0 | 1;
+export const STACKING_OVERLAP = 2;
+export type Stacking = 0 | 1 | 2;
 /**
  * @brief Environment flags for built-in material resolution.
  * @details Tinted, reduced-transparency and increased-contrast variants disable luminance

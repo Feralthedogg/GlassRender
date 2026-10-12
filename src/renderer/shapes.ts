@@ -346,6 +346,7 @@ export abstract class Shapes extends State {
         bd[bb] = bx0; bd[bb + 1] = by0; bd[bb + 2] = bx1; bd[bb + 3] = by1;
         bd[bb + 4] = ex0 < kx0 ? ex0 : kx0; bd[bb + 5] = ey0 < ky0 ? ey0 : ky0;
         bd[bb + 6] = ex1 > kx1 ? ex1 : kx1; bd[bb + 7] = ey1 > ky1 ? ey1 : ky1;
+        bd[bb + 8] = ex0; bd[bb + 9] = ey0; bd[bb + 10] = ex1; bd[bb + 11] = ey1;
         if (this.st[slot] !== ADAPT_OFF) this.lumaDirty[slot] = 1;
         return bits;
     }

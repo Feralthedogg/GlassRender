@@ -4,7 +4,7 @@
  * @details Frames reuse storage except when measuring elements followed on every frame.
  */
 
-import { STACKING_EXACT, STACKING_FLAT } from "../layout.js";
+import { STACKING_EXACT, STACKING_FLAT, STACKING_OVERLAP, type Stacking } from "../layout.js";
 import type { BackdropPixels } from "../layout.js";
 import { displayHeadroom, resolveDisplayHeadroom, type DisplayBrightness } from "../hdr.js";
 import { headroomShare } from "../material.js";
@@ -115,7 +115,7 @@ export class Glass {
         canvas.addEventListener("webglcontextlost", this.onLost);
         canvas.addEventListener("webglcontextrestored", this.onRestored);
         this.applyEnvironment();
-        if (o.stacking === "flat") renderer.setStacking(STACKING_FLAT);
+        if (o.stacking !== undefined) renderer.setStacking(stackingOf(o.stacking));
         if (o.lightAngle !== undefined) renderer.setLightAngle(o.lightAngle);
         if (o.chromaticAberration !== undefined) renderer.setDefaultChromaticAberration(o.chromaticAberration);
         if (o.autoResize ?? true) {
@@ -283,9 +283,9 @@ export class Glass {
         this.update();
     }
 
-    /** @brief Glass over glass: "exact" (default) or "flat". */
+    /** @brief Glass over glass: "exact" (default), "overlap" or "flat". */
     setStacking(mode: StackingMode): void {
-        this.renderer.setStacking(mode === "flat" ? STACKING_FLAT : STACKING_EXACT);
+        this.renderer.setStacking(stackingOf(mode));
         this.update();
     }
 
@@ -514,6 +514,10 @@ export class Glass {
     private upload(): void {
         this.backdrop.upload(this.renderer, this.pixelWidth, this.pixelHeight);
     }
+}
+
+function stackingOf(mode: StackingMode): Stacking {
+    return mode === "flat" ? STACKING_FLAT : mode === "overlap" ? STACKING_OVERLAP : STACKING_EXACT;
 }
 
 /**

@@ -14,8 +14,9 @@ export const R = 16;
 // Capture lanes per slot: capture origin px (y up), texel px, - | position of the region's first texel in the capture
 // (texels), capture size (texels).
 export const C = 8;
-// Bounds lanes per slot (px, y up): draw rect | read rect (captured backdrop and the body, whose edge blends by hand).
-export const B = 8;
+// Bounds lanes per slot (px, y up): draw rect | read rect (captured backdrop and the body, whose edge blends by hand) |
+// body rect (the frame with a pixel of edge).
+export const B = 12;
 // Animation lanes per slot: level, level velocity, mix, mix velocity, target level, target mix, resolved mix, - |
 // presence, presence velocity, target presence.
 export const A = 12;

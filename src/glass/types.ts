@@ -25,9 +25,11 @@ export type Transition = "materialize" | "none";
 export type Fit = "cover" | "contain" | "stretch";
 /**
  * @brief Backdrop source used when glass shapes overlap.
- * @details "exact" includes previously drawn glass; "flat" samples only the backdrop and costs less.
+ * @details "exact" includes previously drawn glass; "overlap" includes only the glass and shadows a
+ * shape lies over, not glass its blur or refraction merely reaches, and costs much less when glass is
+ * laid side by side; "flat" samples only the backdrop and costs least.
  */
-export type StackingMode = "exact" | "flat";
+export type StackingMode = "exact" | "overlap" | "flat";
 /**
  * @brief Explicit setting or device preference selected with "auto".
  */
@@ -190,7 +192,7 @@ export interface GlassOptions {
     readonly autoResize?: boolean;
     /** @brief Upper limit of device pixels per CSS pixel (default 2). */
     readonly maxPixelRatio?: number;
-    /** @brief Glass over glass (default "exact"). */
+    /** @brief Glass over glass: "exact" (default), "overlap" or "flat". */
     readonly stacking?: StackingMode;
     /** @brief Turn of the rim lights in radians, clockwise (default 0). */
     readonly lightAngle?: number;

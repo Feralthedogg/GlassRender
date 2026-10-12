@@ -32,20 +32,27 @@ export abstract class Atlas extends Fields {
         }
         for (let i = this.capacity; i > 0; i--) cs[i] = cs[i - 1] as number;
         cs[0] = 0;
+        const loose = this.overlap;
         for (let i = 0; i < n; i++) {
             const si = o[i] as number, a = si * B;
             if (keys[si] === 0) continue;
             live++;
             const dx0 = bd[a] as number, dy0 = bd[a + 1] as number, dx1 = bd[a + 2] as number, dy1 = bd[a + 3] as number;
             const rx0 = bd[a + 4] as number, ry0 = bd[a + 5] as number, rx1 = bd[a + 6] as number, ry1 = bd[a + 7] as number;
+            const ux0 = bd[a + 8] as number, uy0 = bd[a + 9] as number, ux1 = bd[a + 10] as number, uy1 = bd[a + 11] as number;
             let d = 0;
             for (let k = cs[si] as number, e = cs[si + 1] as number; k < e; k++) {
                 const sj = cand[k] as number, c = sj * B;
                 // a shape that reads pixels of a lower one goes into a later batch; one that only covers pixels the
                 // lower one reads must not come earlier (inside a batch everything is captured before anything is drawn)
                 if ((bd[c] as number) < rx1 && (bd[c + 2] as number) > rx0 && (bd[c + 1] as number) < ry1 && (bd[c + 3] as number) > ry0) {
-                    fl[si] = (fl[si] as number) | FLAG_READS; fl[sj] = (fl[sj] as number) | FLAG_READ;
-                    if ((dp[sj] as number) >= d) d = (dp[sj] as number) + 1;
+                    // Overlap stacking reads the lower shape only where the body lies over it or its shadow; otherwise it
+                    // shares the lower shape's batch (captured before either is drawn) so it is still drawn after it.
+                    if (!loose || ((bd[c] as number) < ux1 && (bd[c + 2] as number) > ux0 && (bd[c + 1] as number) < uy1 && (bd[c + 3] as number) > uy0)) {
+                        fl[si] = (fl[si] as number) | FLAG_READS; fl[sj] = (fl[sj] as number) | FLAG_READ;
+                        if ((dp[sj] as number) >= d) d = (dp[sj] as number) + 1;
+                    } else if ((dp[sj] as number) > d && ((dx0 < (bd[c + 2] as number) && dx1 > (bd[c] as number) && dy0 < (bd[c + 3] as number) && dy1 > (bd[c + 1] as number))
+                        || (dx0 < (bd[c + 6] as number) && dx1 > (bd[c + 4] as number) && dy0 < (bd[c + 7] as number) && dy1 > (bd[c + 5] as number)))) d = dp[sj] as number;
                 } else if ((dp[sj] as number) > d && dx0 < (bd[c + 6] as number) && dx1 > (bd[c + 4] as number)
                     && dy0 < (bd[c + 7] as number) && dy1 > (bd[c + 5] as number)) d = dp[sj] as number;
             }

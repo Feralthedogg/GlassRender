@@ -5,7 +5,7 @@
 
 import {
     BLOCK_BYTES, type BackdropPixels, type CornerKind, DEFAULT_CHROMATIC_ABERRATION, MAX_MEMBERS, MEMBER_BOX, MEMBER_FIELD, MEMBER_UNEVEN, type RowOrder, ROWS_TOP_DOWN,
-    type Scheme, SCHEME_DARK, type Stacking, STACKING_EXACT, UNION_BYTES
+    type Scheme, SCHEME_DARK, type Stacking, STACKING_FLAT, STACKING_OVERLAP, UNION_BYTES
 } from "../layout.js";
 import { PRESET_CLEAR, PRESET_COUNT, PRESET_STANDARD } from "../preset.js";
 import { err, ok, type Result } from "../result.js";
@@ -681,12 +681,16 @@ export class Renderer extends Frame {
     /**
      * @brief Choose how shapes that lie over other shapes are drawn.
      * @param mode `STACKING_EXACT` (default): a shape refracts the glass below it; every layer of
-     * overlap costs one more group of capture passes. `STACKING_FLAT`: every shape refracts the
-     * backdrop only and all shapes are drawn in one batch.
+     * overlap costs one more group of capture passes. `STACKING_OVERLAP`: a shape refracts the lower
+     * glass and shadows its body covers, but not glass its blur or refraction only reaches, so glass
+     * laid side by side is captured in one batch. `STACKING_FLAT`: every shape refracts the backdrop
+     * only and all shapes are drawn in one batch.
      */
     setStacking(mode: Stacking): void {
-        const flat = mode !== STACKING_EXACT;
-        if (this.flat !== flat) { this.flat = flat; this.layoutDirty = true; this.stale = true; this.full = true; }
+        const flat = mode === STACKING_FLAT, overlap = mode === STACKING_OVERLAP;
+        if (this.flat !== flat || this.overlap !== overlap) {
+            this.flat = flat; this.overlap = overlap; this.layoutDirty = true; this.stale = true; this.full = true;
+        }
     }
 
     /**
