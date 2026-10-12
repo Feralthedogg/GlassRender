@@ -115,7 +115,7 @@ export abstract class Frame extends Tint {
     }
 
     // Current framebuffer color for one draw, independent of its captured/refraction backdrop.
-    protected keepDestination(slot: number): void {
+    protected keepDestination(slot: number, requiredX0?: number, requiredY0?: number, requiredX1?: number, requiredY1?: number): void {
         const gl = this.gl, b = slot * B, bd = this.bounds, c = this.clip;
         let x0 = bd[b] as number, y0 = bd[b + 1] as number, x1 = bd[b + 2] as number, y1 = bd[b + 3] as number;
         if (this.geoms[slot] === GEOM_BOX) {
@@ -125,6 +125,10 @@ export abstract class Frame extends Tint {
             x1 = Math.max(x1, ((d[g + 5] as number) + 1) * this.width * 0.5);
             y0 = Math.min(y0, ((d[g + 6] as number) + 1) * this.height * 0.5);
             y1 = Math.max(y1, ((d[g + 11] as number) + 1) * this.height * 0.5);
+        }
+        if (requiredX0 !== undefined && requiredY0 !== undefined && requiredX1 !== undefined && requiredY1 !== undefined) {
+            x0 = Math.min(x0, requiredX0); y0 = Math.min(y0, requiredY0);
+            x1 = Math.max(x1, requiredX1); y1 = Math.max(y1, requiredY1);
         }
         const bx0 = Math.max(0, c[0] as number, Math.floor(x0)), by0 = Math.max(0, c[1] as number, Math.floor(y0));
         const bx1 = Math.min(this.width, c[2] as number, Math.ceil(x1)), by1 = Math.min(this.height, c[3] as number, Math.ceil(y1));

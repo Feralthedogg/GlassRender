@@ -271,6 +271,19 @@ const OVAL = (ratio: string): string => "vec2 v=vec2(q.x,q.y*" + ratio + ");v=h2
 const BODY = `const vec3 L=vec3(.2126,.7152,.0722);const vec3 LB=vec3(.2125,.7154,.0721);const float E=${SMOOTH_REACH};
 float sat(float x){return clamp(x,0.,1.);}
 vec2 sat2(vec2 x){return clamp(x,0.,1.);}
+#ifdef SHARP
+// Native zero-radius boxes retain a .01 circular SDF. Keep Float operations before its half stores.
+float sdfFloat(float x){return uintBitsToFloat(floatBitsToUint(x)^uHalfBarrier);}
+vec2 sdfFloat2(vec2 x){return vec2(sdfFloat(x.x),sdfFloat(x.y));}
+float sharpDistance(vec2 a,vec2 h){float e0=sdfFloat(.009999999776482582*E);vec2 base=sdfFloat2(a-h);
+vec2 u=sdfFloat2(base+.009999999776482582),c=max(sdfFloat2(sdfFloat2(base+e0)/e0),0.);
+vec2 rounded=max(sdfFloat2(sdfFloat2(c*E)-.528665),0.);
+float square=sdfFloat(sdfFloat(rounded.x*rounded.x)+sdfFloat(rounded.y*rounded.y));
+float magnitude=sdfFloat(sqrt(square));
+float circle=sdfFloat(sdfFloat(magnitude*uintBitsToFloat(0x3f277765u))+uintBitsToFloat(0x3eb11136u));
+float normalized=hf(circle-1.),scaled=hf(e0*normalized),inside=min(max(hf(u.x),hf(u.y)),0.);
+return hf(inside+scaled);}
+#endif
 // Explicit binary16 nearest-even boundary for the normal's reciprocal square root.
 float hfBits(float x){highp uint b=floatBitsToUint(x),a=b&0x7fffffffu,sign=b&0x80000000u;
 if(a>=0x7f800000u)return x;if(a>=0x477ff000u)return uintBitsToFloat(sign|0x7f800000u);
@@ -473,21 +486,30 @@ float dist(vec2 q){return unevenDist(q,${FR}.zw,${RA2},${EG});}
 #else
 float dist(vec2 q){vec2 a=abs(q),h=${FR}.zw;
 #ifdef SHARP
-vec2 u=a-h;return length(max(u,0.))+min(max(u.x,u.y),0.);
+return sharpDistance(a,h);
 #else
-float e0=${CO}.y;vec2 u=a-h+${CO}.z;vec2 c=max((a-h+e0)/e0,0.);${CURVE}
+float e0=${CO}.y;vec2 u=a-h+${CO}.z;
+// Native SDF coordinates store the Float subtraction and extent addition before division.
+vec2 base=uintBitsToFloat(floatBitsToUint(a-h)^uvec2(uHalfBarrier));
+vec2 numerator=uintBitsToFloat(floatBitsToUint(base+e0)^uvec2(uHalfBarrier));vec2 c=max(numerator/e0,0.);${CURVE}
 vec2 kk=${RO}.xy;return hf(min(max(hf(u.x),hf(u.y)),0.)+hf(e0*(${DEPTH})));
 #endif
 }
 float shape(vec2 q,out vec2 n){
 #ifdef SHARP
-vec2 u=abs(q)-${FR}.zw;n=u.x>u.y?vec2(1.,0.):vec2(0.,1.);
+vec2 u=abs(q)-${FR}.zw+.009999999776482582,w=max(u,0.);float l=length(w);
+n=l>0.?w/l:(u.x>u.y?vec2(1.,0.):vec2(0.,1.));
 #else
 vec2 u=abs(q)-${FR}.zw+${CO}.z;vec2 w=max(u,0.);float l=length(w);n=l>0.?w/l:(u.x>u.y?vec2(1.,0.):vec2(0.,1.));
 #endif
 n=h2(n)*vec2(q.x>=0.?1.:-1.,q.y>=0.?1.:-1.);
 #ifdef ROUND
+#ifdef SHARP
+vec2 v=vec2(q.x,sdfFloat(sdfFloat(${FR}.z*q.y)/${FR}.w));v=h2(v*inversesqrt(dot(v,v)));
+n=blendNormal(n,v,hf(${MX}.z));
+#else
 ${OVAL(RO + ".z")}
+#endif
 #else
 n=h2(h2(n)*hf(inversesqrt(hf(dot(h2(n),h2(n))))));
 #endif
@@ -556,7 +578,12 @@ vec2 n=vec2(0.);float d=0.;
 #ifdef GRID
 if(vMode==4)d=hf(shape(q,n));else if(vMode==0){vec2 u=h2(abs(q)-${FR}.zw);d=max(u.x,u.y);n=(u.x>u.y?vec2(1.,0.):vec2(0.,1.))*vec2(q.x>=0.?1.:-1.,q.y>=0.?1.:-1.);
 #ifdef ROUND
+#ifdef SHARP
+vec2 v=vec2(q.x,sdfFloat(sdfFloat(${FR}.z*q.y)/${FR}.w));v=h2(v*inversesqrt(dot(v,v)));
+n=blendNormal(n,v,hf(${MX}.z));
+#else
 ${OVAL(RO + ".z")}
+#endif
 #endif
 }
 #else
@@ -761,6 +788,10 @@ export function rimFragment(key: number, edr = false, hdr = false, worldY = fals
     source = source.replace("hf(dot(n,n))", "hf(hf(n.x*n.x)+n.y*n.y)");
     source = source.replace("float lobe=hf(sat((pj-cs)/max(hf(1.-cs),hf(.000100017))));",
         "float lobe=hf(sat(hf(pj-cs)/max(hf(1.-cs),hf(.000100017))));");
+    // Keep the measured fixed-image rim product order through Float32 stores at half midpoints.
+    source = source.replace("return hf(sat(e/fe+.5)*mix(u<1.?1.:0.,1.-u,cv)*sat((h-e)/fe+.5)*lobe);",
+        "float value=floatBoundary(sat(e/fe+.5)*lobe);value=floatBoundary(value*mix(u<1.?1.:0.,1.-u,cv));"
+        + "return hf(floatBoundary(value*sat((h-e)/fe+.5)));");
     // Generic blend43 clamps after both half alpha weights and an unpremultiply.
     source = source.replace("float a=hf(sat(hf(v.a))*hf(h));",
         "float matrixAlpha=hf(sat(hf(v.a)));vec3 weighted=h3(v.rgb*matrixAlpha);"
@@ -817,7 +848,7 @@ export function sdfFillMaskFragment(key: number): string {
 }
 
 /** Independent foreground output using the same tint operation as the public body path. */
-export function tintForegroundFragment(key: number, separateMask = true, compositeBackdrop = false): string {
+export function tintForegroundFragment(key: number, separateMask = true, compositeBackdrop = false, nativeFillRows = false): string {
     const full = sdfFillMaskFragment(key | FEATURE_TINT);
     return full.replace("uniform float uOffset;", "uniform float uOffset;uniform highp sampler2D uTintBackdrop;uniform vec2 uTintOrigin;"
             + (separateMask ? "uniform highp sampler2D uTintFill;uniform vec2 uTintFillOrigin;uniform vec2 uTintFillSize;" : "")
@@ -826,7 +857,7 @@ export function tintForegroundFragment(key: number, separateMask = true, composi
             + "vec4 backdrop=texelFetch(uTintBackdrop,ivec2(pixel),0);"
             + (compositeBackdrop ? "backdrop=halfFMA4(texelFetch(uTintUnderlying,ivec2(pixel),0),hf(1.-backdrop.a),backdrop);backdrop.a=hf(sat(backdrop.a));" : "")
             + "float edge=10.-d,coverage=hf(sat(edge/clamp(fwidth(edge),.0001,1.)+.5));"
-            + (separateMask ? "ivec2 maskPixel=ivec2(pixel-uTintFillOrigin);alpha=any(lessThan(maskPixel,ivec2(0)))||any(greaterThanEqual(maskPixel,ivec2(uTintFillSize)))?0.:texelFetch(uTintFill,maskPixel,0).a;" : "")
+            + (separateMask ? "ivec2 maskPixel=ivec2(" + (nativeFillRows ? "vec2(pixel.x,f[2].y-pixel.y)" : "pixel") + "-uTintFillOrigin);alpha=any(lessThan(maskPixel,ivec2(0)))||any(greaterThanEqual(maskPixel,ivec2(uTintFillSize)))?0.:texelFetch(uTintFill,maskPixel,0).a;" : "")
             + "o=tintForeground(backdrop,coverage,alpha,d);}");
 }
 

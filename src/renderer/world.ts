@@ -81,7 +81,7 @@ export abstract class World extends Tone {
         return true;
     }
 
-    protected drawWorld(program: WebGLProgram, vao: WebGLVertexArrayObject | null, vertices: Float32Array, stride: number, indexOffset = -1, rimMode?: WebGLUniformLocation | null): void {
+    protected drawWorld(program: WebGLProgram, vao: WebGLVertexArrayObject | null, vertices: Float32Array, stride: number, indexOffset = -1, rimMode?: WebGLUniformLocation | null, sideCount = 24, indexCount = 24): void {
         const gl = this.gl, w = this.width, h = this.height;
         const location = this.worldLocation(program);
         if (location === null) return;
@@ -108,11 +108,11 @@ export abstract class World extends Tone {
             gl.enable(gl.SCISSOR_TEST); gl.scissor(x0, y0, x1-x0, y1-y0); gl.bindVertexArray(vao); gl.useProgram(program);
             this.worldMatrix[0] = 2 / w; this.worldMatrix[5] = -2 / h; gl.uniformMatrix4fv(location, false, this.worldMatrix);
             if (indexOffset < 0) gl.drawArrays(gl.TRIANGLES, 0, 150);
-            else if (rimMode === undefined) gl.drawElements(gl.TRIANGLES, 24, gl.UNSIGNED_SHORT, indexOffset);
+            else if (rimMode === undefined) gl.drawElements(gl.TRIANGLES, indexCount, gl.UNSIGNED_SHORT, indexOffset);
             else {
                 // Corner and side cells have disjoint raster coverage; their SDF modes stay separate.
                 gl.uniform1i(rimMode, 4); gl.drawElements(gl.TRIANGLES, 24, gl.UNSIGNED_SHORT, indexOffset);
-                gl.uniform1i(rimMode, 0); gl.drawElements(gl.TRIANGLES, 24, gl.UNSIGNED_SHORT, indexOffset + 48);
+                gl.uniform1i(rimMode, 0); gl.drawElements(gl.TRIANGLES, sideCount, gl.UNSIGNED_SHORT, indexOffset + 48);
             }
             gl.disable(gl.SCISSOR_TEST); gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.worldFbo); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, draw);
             gl.blitFramebuffer(x0, y0, x1, y1, x0, h-y0, x1, h-y1, gl.COLOR_BUFFER_BIT, gl.NEAREST);

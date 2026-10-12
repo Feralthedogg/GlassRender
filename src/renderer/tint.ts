@@ -4,10 +4,10 @@
  * Other effect combinations retain the existing path until their ordering is validated.
  */
 import {GROUP_VERTEX,RIM_VERTEX,sdfFillMaskFragment,tintForegroundFragment,tintCompositeFragment} from "../kernels.js";
-import {ROW_CORNER} from "../layout.js";
+import {ROW_CORNER,SMOOTH_REACH} from "../layout.js";
 import {fma32} from "../precision.js";
-import {boxEffectMesh,BOX_CORNER_INDICES,BOX_FILL_INDICES} from "./effect-mesh.js";
-import {G} from "./lanes.js";
+import {boxEffectMesh,BOX_CORNER_INDICES,BOX_FILL_INDICES,BOX_QUAD_INDICES} from "./effect-mesh.js";
+import {A,G} from "./lanes.js";
 import {Group} from "./group.js";
 import {link} from "./shared.js";
 
@@ -50,7 +50,7 @@ export abstract class Tint extends Group {
         const scissored=gl.isEnabled(gl.SCISSOR_TEST),scissor=gl.getParameter(gl.SCISSOR_BOX) as Int32Array;
         try{
             let programs=this.tintPrograms.get(key);
-            if(!programs){const fill=link(gl,RIM_VERTEX,sdfFillMaskFragment(key)),foreground=link(gl,RIM_VERTEX,tintForegroundFragment(key,true,this.groupLayer(key)));
+            if(!programs){const fill=link(gl,RIM_VERTEX,sdfFillMaskFragment(key)),foreground=link(gl,RIM_VERTEX,tintForegroundFragment(key,true,this.groupLayer(key),true));
                 if(!fill||!foreground){gl.deleteProgram(fill);gl.deleteProgram(foreground);return;}
                 programs=[fill,foreground];this.tintPrograms.set(key,programs);
                 for(const p of programs){for(const[name,binding]of[["M",0],["F",1],["U",2]] as const){const i=gl.getUniformBlockIndex(p,name);if(i!==gl.INVALID_INDEX)gl.uniformBlockBinding(p,i,binding);}
@@ -63,25 +63,35 @@ export abstract class Tint extends Group {
                 gl.useProgram(composite);gl.uniform1ui(gl.getUniformLocation(composite,"uHalfBarrier"),0);gl.uniform1i(gl.getUniformLocation(composite,"uD"),6);gl.uniform1i(gl.getUniformLocation(composite,"uTintForeground"),9);}
             if(!this.tintVao){const vao=gl.createVertexArray(),vbo=gl.createBuffer(),ibo=gl.createBuffer();if(!vao||!vbo||!ibo){gl.deleteVertexArray(vao);gl.deleteBuffer(vbo);gl.deleteBuffer(ibo);return;}
                 gl.bindVertexArray(vao);gl.bindBuffer(gl.ARRAY_BUFFER,vbo);gl.bufferData(gl.ARRAY_BUFFER,384,gl.STREAM_DRAW);gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,4,gl.FLOAT,false,24,0);gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,2,gl.FLOAT,false,24,16);
-                const index=new Uint16Array(54);index.set(BOX_CORNER_INDICES);index.set(BOX_FILL_INDICES,24);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ibo);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,index,gl.STATIC_DRAW);this.tintVao=vao;this.tintVbo=vbo;this.tintIbo=ibo;}
+                const index=new Uint16Array(60);index.set(BOX_CORNER_INDICES);index.set(BOX_FILL_INDICES,24);index.set(BOX_QUAD_INDICES,54);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ibo);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,index,gl.STATIC_DRAW);this.tintVao=vao;this.tintVbo=vbo;this.tintIbo=ibo;}
             const b=slot*G,g=this.geo,e=this.swell(slot),s=this.scale,hx=(g[b+2] as number)*.5+e,hy=(g[b+3] as number)*.5+e;
             const cx=(g[b] as number)+(g[b+2] as number)*.5,cy=(g[b+1] as number)+(g[b+3] as number)*.5,radius=this.blocks[slot*this.stride+ROW_CORNER*4] as number;
-            const extent=(padding:number)=>{const x=Math.floor((cx-hx-padding)*s),y=Math.floor((cy-hy-padding)*s),right=Math.ceil((cx+hx+padding)*s),bottom=Math.ceil((cy+hy+padding)*s);return{x,y,width:Math.ceil((right-x)/64)*64,height:Math.ceil((bottom-y)/64)*64,right,bottom};};
-            const fillBounds=extent(9.5),foregroundBounds=extent(18);
+            // Native offscreen surfaces intersect the scene before their 64-pixel allocation rounding.
+            const extent=(padding:number)=>{const x=Math.max(0,Math.floor((cx-hx-padding)*s)),y=Math.max(0,Math.floor((cy-hy-padding)*s)),right=Math.min(this.width,Math.ceil((cx+hx+padding)*s)),bottom=Math.min(this.height,Math.ceil((cy+hy+padding)*s));return{x,y,width:Math.ceil((right-x)/64)*64,height:Math.ceil((bottom-y)/64)*64,right,bottom};};
+            const fillOffset=-.5*(this.ad[slot*A+6] as number),fillPadding=9+Math.abs(fillOffset);
+            const fillSceneBounds=extent(fillPadding),foregroundBounds=extent(18);
+            if(fillSceneBounds.right<=fillSceneBounds.x||fillSceneBounds.bottom<=fillSceneBounds.y||foregroundBounds.right<=foregroundBounds.x||foregroundBounds.bottom<=foregroundBounds.y)return;
+            // Fill keeps native scene rows. Mirror the exact valid bounds, excluding allocation padding.
+            const fillBounds={...fillSceneBounds,y:this.height-fillSceneBounds.bottom,bottom:this.height-fillSceneBounds.y};
             if(Math.max(fillBounds.width,fillBounds.height,foregroundBounds.width,foregroundBounds.height)>this.maxTex)return;
             this.tintFill=this.tintSurface(this.tintFill,fillBounds.width,fillBounds.height,8);this.tintForeground=this.tintSurface(this.tintForeground,foregroundBounds.width,foregroundBounds.height,9);
             if(!this.tintFill||!this.tintForeground)return;
-            this.keepDestination(slot);gl.activeTexture(gl.TEXTURE6);gl.bindTexture(gl.TEXTURE_2D,this.destinationTex);if(!this.bindTintMask())return;
+            // Tint composites its whole foreground extent, including transparent support pixels.
+            this.keepDestination(slot,foregroundBounds.x,this.height-foregroundBounds.bottom,foregroundBounds.right,this.height-foregroundBounds.y);gl.activeTexture(gl.TEXTURE6);gl.bindTexture(gl.TEXTURE_2D,this.destinationTex);if(!this.bindTintMask())return;
             if(premultiplied){gl.activeTexture(gl.TEXTURE10);gl.bindTexture(gl.TEXTURE_2D,this.sceneTex);}
             gl.disable(gl.SCISSOR_TEST);gl.disable(gl.BLEND);
             for(let i=0;i<2;i++){
                 const bounds=i===0?fillBounds:foregroundBounds,surface=i===0?this.tintFill:this.tintForeground,p=programs[i] as WebGLProgram;
                 gl.bindFramebuffer(gl.FRAMEBUFFER,surface.fbo);gl.viewport(0,0,bounds.width,bounds.height);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
                 gl.useProgram(p);const sx=Math.fround(2/bounds.width),sy=Math.fround(-2/bounds.height);gl.uniform4f(gl.getUniformLocation(p,"uProjection"),sx,sy,fma32(sx,-bounds.x,-1),fma32(-sy,bounds.y,1));
+                if(i===0)gl.uniform1f(gl.getUniformLocation(p,"uOffset"),fillOffset);
                 gl.uniform2f(gl.getUniformLocation(p,"uTintOrigin"),bounds.x,bounds.y);gl.uniform2f(gl.getUniformLocation(p,"uTintFillOrigin"),fillBounds.x,fillBounds.y);gl.uniform2f(gl.getUniformLocation(p,"uTintFillSize"),fillBounds.width,fillBounds.height);
                 if(i===1){gl.activeTexture(gl.TEXTURE8);gl.bindTexture(gl.TEXTURE_2D,this.tintFill.texture);}
-                boxEffectMesh(this.tintVertices,cx,cy,hx,hy,radius,i===0?9.5:18,s,false);gl.bindVertexArray(this.tintVao);gl.bindBuffer(gl.ARRAY_BUFFER,this.tintVbo);gl.bufferSubData(gl.ARRAY_BUFFER,0,this.tintVertices);
-                gl.uniform1i(gl.getUniformLocation(p,"uMode"),4);gl.drawElements(gl.TRIANGLES,24,gl.UNSIGNED_SHORT,0);gl.uniform1i(gl.getUniformLocation(p,"uMode"),0);gl.drawElements(gl.TRIANGLES,30,gl.UNSIGNED_SHORT,48);
+                // The native zero-radius fill and foreground retain the .01 circular inner partition.
+                boxEffectMesh(this.tintVertices,cx,i===0?this.height/s-cy:cy,hx,hy,radius,i===0?fillPadding:18,s,false,radius<=0?Math.fround(.01):undefined);gl.bindVertexArray(this.tintVao);gl.bindBuffer(gl.ARRAY_BUFFER,this.tintVbo);gl.bufferSubData(gl.ARRAY_BUFFER,0,this.tintVertices);
+                gl.uniform1i(gl.getUniformLocation(p,"uMode"),4);
+                if(radius>0&&radius*SMOOTH_REACH>=Math.max(hx,hy))gl.drawElements(gl.TRIANGLES,6,gl.UNSIGNED_SHORT,108);
+                else{gl.drawElements(gl.TRIANGLES,24,gl.UNSIGNED_SHORT,0);gl.uniform1i(gl.getUniformLocation(p,"uMode"),0);gl.drawElements(gl.TRIANGLES,30,gl.UNSIGNED_SHORT,48);}
             }
             gl.bindFramebuffer(gl.FRAMEBUFFER,scene);gl.viewport(viewport[0] as number,viewport[1] as number,viewport[2] as number,viewport[3] as number);gl.enable(gl.SCISSOR_TEST);
             const x0=Math.max(0,foregroundBounds.x,scissored?scissor[0] as number:0),y0=Math.max(0,foregroundBounds.y,scissored?scissor[1] as number:0);

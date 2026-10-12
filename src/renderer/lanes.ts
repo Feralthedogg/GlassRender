@@ -16,7 +16,7 @@ export const R = 16;
 export const C = 8;
 // Bounds lanes per slot (px, y up): draw rect | read rect (captured backdrop and the body, whose edge blends by hand).
 export const B = 8;
-// Animation lanes per slot: level, level velocity, mix, mix velocity, target level, target mix, -, - |
+// Animation lanes per slot: level, level velocity, mix, mix velocity, target level, target mix, resolved mix, - |
 // presence, presence velocity, target presence.
 export const A = 12;
 // A handle stores the slot in its low 20 bits and the slot generation above them.

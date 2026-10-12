@@ -1,7 +1,7 @@
 /** Fixed-image rim draw and its geometry/resource lifetime. */
 import { RIM_VERTEX, groupRimFragment, rimFragment, shapeVertex, worldVertex } from "../kernels.js";
 import {
-    FEATURE_FIELD, MEMBER_SHIFT, ROW_CORNER, ROW_RIM_FILL, ROW_RIM_FILL_MORE, ROW_RIM_KEY, ROW_RIM_KEY_MORE,
+    FEATURE_FIELD, MEMBER_SHIFT, ROW_CORNER, ROW_RIM_FILL, ROW_RIM_FILL_MORE, ROW_RIM_KEY, ROW_RIM_KEY_MORE, SMOOTH_REACH,
 } from "../layout.js";
 import {boxEffectMesh} from "./effect-mesh.js";
 import { G, GEOM_BOX, MMF } from "./lanes.js";
@@ -10,11 +10,13 @@ import { World } from "./world.js";
 
 const INDICES = new Uint16Array([
     0, 1, 5, 5, 4, 0, 3, 7, 6, 6, 2, 3, 10, 11, 15, 15, 14, 10, 9, 13, 12, 12, 8, 9,
-    1, 2, 6, 6, 5, 1, 4, 5, 9, 9, 8, 4, 6, 7, 11, 11, 10, 6, 9, 10, 14, 14, 13, 9
+    1, 2, 6, 6, 5, 1, 4, 5, 9, 9, 8, 4, 6, 7, 11, 11, 10, 6, 9, 10, 14, 14, 13, 9,
+    5, 6, 10, 10, 9, 5,
+    0, 3, 15, 15, 12, 0
 ]);
 
 export abstract class Rim extends World {
-    protected abstract keepDestination(slot: number): void;
+    protected abstract keepDestination(slot: number, x0?: number, y0?: number, x1?: number, y1?: number): void;
 
     protected dropRim(deleteObjects: boolean): void {
         this.dropWorld(deleteObjects);
@@ -66,6 +68,7 @@ export abstract class Rim extends World {
             this.rimPrograms.set(cacheKey, value);
         }
         if (box && !this.openRimMesh()) return;
+        let sideCount = 24, singleQuad = false;
         gl.useProgram(value.program);
         if (box) {
             const b = slot * G, g = this.geo, e = this.swell(slot), s = this.scale;
@@ -74,10 +77,20 @@ export abstract class Rim extends World {
             const cx = (g[b] as number) + (g[b + 2] as number) * .5, topCy = (g[b + 1] as number) + (g[b + 3] as number) * .5;
             const cy = world ? this.height / s - topCy : topCy;
             const o = slot * this.stride, d = this.blocks, radius = d[o + ROW_CORNER * 4] as number;
-            const padding = Math.max(d[o + ROW_RIM_KEY * 4 + 2] as number, d[o + ROW_RIM_KEY_MORE * 4 + 1] as number,
-                d[o + ROW_RIM_FILL * 4] as number, d[o + ROW_RIM_FILL * 4 + 3] as number) + Math.abs(d[o + ROW_RIM_FILL_MORE * 4 + 3] as number) + 1;
+            singleQuad = radius > 0 && radius * SMOOTH_REACH >= Math.max(hx, hy);
+            const maxHeight = Math.max(d[o + ROW_RIM_KEY * 4 + 2] as number, d[o + ROW_RIM_KEY_MORE * 4 + 1] as number,
+                d[o + ROW_RIM_FILL * 4] as number, d[o + ROW_RIM_FILL * 4 + 3] as number);
+            const offset = d[o + ROW_RIM_FILL_MORE * 4 + 3] as number;
+            // Native type8 returns separate outside/inside ranges. With smoothness 8 and
+            // Gaussian radius 0, light heights extend inward; only negative offsets extend
+            // the outside range. Preserve each Float store before packing the mesh.
+            const padding = Math.fround(9 - Math.min(offset, 0));
+            const insideRange = Math.fround(Math.fround(8 + maxHeight) + Math.max(offset, 0));
+            // The CPU compares Double reach, even when the mesh's stored Float reach rounds up.
+            if (radius * SMOOTH_REACH < insideRange) sideCount = 30;
             const v = this.rimVertices;
-            boxEffectMesh(v, cx, cy, hx, hy, radius, padding, s, !world);
+            // A native zero-radius rim retains the .01 circular SDF's inner partition.
+            boxEffectMesh(v, cx, cy, hx, hy, radius, padding, s, !world, radius <= 0 ? Math.fround(.01) : Math.fround(Math.fround(radius) * SMOOTH_REACH));
             gl.bindVertexArray(this.rimVao); gl.bindBuffer(gl.ARRAY_BUFFER, this.rimVertexBuffer); gl.bufferSubData(gl.ARRAY_BUFFER, 0, v);
             gl.uniform4f(value.projection, Math.fround(2 / this.width), Math.fround(-2 / this.height), -1, 1);
         } else gl.bindVertexArray(this.vao);
@@ -85,18 +98,22 @@ export abstract class Rim extends World {
             this.keepDestination(slot);
             gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, this.destinationTex); gl.activeTexture(gl.TEXTURE0);
             gl.useProgram(value.program);
-            this.drawWorld(value.program, this.rimVao, this.rimVertices, 6, 0, value.mode);
+            if (singleQuad) {
+                gl.uniform1i(value.mode, 4);
+                this.drawWorld(value.program, this.rimVao, this.rimVertices, 6, 108, undefined, 24, 6);
+            } else this.drawWorld(value.program, this.rimVao, this.rimVertices, 6, 0, value.mode, sideCount);
             return;
         }
-        const passes = box ? 2 : 1;
+        const passes = box && !singleQuad ? 2 : 1;
         for (let i = 0; i < passes; i++) {
             this.keepDestination(slot);
             gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, this.destinationTex); gl.activeTexture(gl.TEXTURE0);
             gl.useProgram(value.program);
             if (box) {
                 gl.uniform1i(value.mode, i === 0 ? 4 : 0);
-                if (this.extended && this.worldLocation(value.program) !== null) this.drawWorld(value.program, this.rimVao, this.rimVertices, 6, i * 48);
-                else gl.drawElements(gl.TRIANGLES, 24, gl.UNSIGNED_SHORT, i * 48);
+                if (singleQuad) gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 108);
+                else if (this.extended && this.worldLocation(value.program) !== null) this.drawWorld(value.program, this.rimVao, this.rimVertices, 6, i * 48);
+                else gl.drawElements(gl.TRIANGLES, i === 0 ? 24 : sideCount, gl.UNSIGNED_SHORT, i * 48);
             }
             else gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         }

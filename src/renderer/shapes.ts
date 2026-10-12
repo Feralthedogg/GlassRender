@@ -121,6 +121,7 @@ export abstract class Shapes extends State {
             if (s === ADAPT_OFF) { this.st[slot] = ADAPT_FIRST; this.lumaDirty[slot] = 1; a[ab + 2] = env; a[ab + 5] = env; }
             else if (s === ADAPT_LIVE) mix = a[ab + 2] as number;
         } else this.st[slot] = ADAPT_OFF;
+        a[ab + 6] = mix;
         const pr = a[ab + 8] as number;
         let f = packPreset(this.blocks, o, g, b + 6, P, side, g[b + 18] as number, mix, pr, this.env, this.share, this.scale);
         const value = this.chromatic[slot] as number, strength = value < 0 ? this.chromaticDefault : value;
@@ -132,7 +133,7 @@ export abstract class Shapes extends State {
         }
         g[b + 22] = PRESET_RANGE[0] as number; g[b + 23] = PRESET_RANGE[1] as number;
         const t = this.tints, tb = slot * 4;
-        f |= packTint(this.blocks, o, t[tb] as number, t[tb + 1] as number, t[tb + 2] as number, (t[tb + 3] as number) * pr, mix);
+        f |= packTint(this.blocks, o, t[tb] as number, t[tb + 1] as number, t[tb + 2] as number, (t[tb + 3] as number) * pr, P === PRESET_CLEAR ? 1 : mix);
         if ((f & FEATURE_TINT) !== 0) this.blocks[o + ROW_TINT_MORE * 4] = vibrantClamp(this.blocks[o + ROW_TINT_MORE * 4] as number);
         this.feats[slot] = f;
         this.touch(slot);
@@ -301,7 +302,9 @@ export abstract class Shapes extends State {
              * Partition in Float64 before Float32 rounding. The fragment path uses Float32;
              * changing this order shifts grid boundaries at rounded corners.
              */
-            const corner = fr(fr(d[o + 4] as number) * E);
+            const radius = d[o + 4] as number;
+            // The native zero-radius SDF has a .01 circular corner and partitions at that radius.
+            const corner = radius <= 0 ? Math.min(Math.fround(.01), hx, hy) : fr(fr(radius) * E);
             for (let axis = 0; axis < 2; axis++) {
                 const half = axis === 0 ? hx : hy, centre = axis === 0 ? cx : cy;
                 const offset = axis === 0 ? ox : -oy;
