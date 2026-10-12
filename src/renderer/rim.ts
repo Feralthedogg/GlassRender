@@ -1,7 +1,7 @@
 /** Fixed-image rim draw and its geometry/resource lifetime. */
 import { RIM_VERTEX, groupRimFragment, rimFragment, shapeVertex, worldVertex } from "../kernels.js";
 import {
-    FEATURE_FIELD, MEMBER_SHIFT, ROW_CORNER, ROW_RIM_FILL, ROW_RIM_FILL_MORE, ROW_RIM_KEY, ROW_RIM_KEY_MORE, SMOOTH_REACH,
+    FEATURE_FADE, FEATURE_FIELD, FEATURE_VEIL, MEMBER_SHIFT, ROW_CORNER, ROW_RIM_FILL, ROW_RIM_FILL_MORE, ROW_RIM_KEY, ROW_RIM_KEY_MORE, SMOOTH_REACH,
 } from "../layout.js";
 import {boxEffectMesh} from "./effect-mesh.js";
 import { G, GEOM_BOX, MMF } from "./lanes.js";
@@ -48,10 +48,12 @@ export abstract class Rim extends World {
         if (!this.separateRim(key)) return;
         const box = this.geoms[slot] === GEOM_BOX, edr = this.frame[14] !== 1, hdr = this.frame[15] !== 0;
         const world = box && this.extended && !hdr;
-        const cacheKey = key * 16 + (edr ? 1 : 0) + (hdr ? 2 : 0) + (box ? 4 : 0) + (premultiplied ? 8 : 0), gl = this.gl;
+        // The veil and the layer opacity are not part of the rim source.
+        const source = key & ~(FEATURE_VEIL | FEATURE_FADE);
+        const cacheKey = source * 16 + (edr ? 1 : 0) + (hdr ? 2 : 0) + (box ? 4 : 0) + (premultiplied ? 8 : 0), gl = this.gl;
         let value = this.rimPrograms.get(cacheKey);
         if (value === undefined) {
-            const program = link(gl, box ? world ? worldVertex(true) : RIM_VERTEX : shapeVertex(false, true), premultiplied ? groupRimFragment(key, edr, hdr, world) : rimFragment(key, edr, hdr, world));
+            const program = link(gl, box ? world ? worldVertex(true) : RIM_VERTEX : shapeVertex(false, true), premultiplied ? groupRimFragment(source, edr, hdr, world) : rimFragment(source, edr, hdr, world));
             if (program === null) return;
             for (const [name, binding] of [["M", 0], ["F", 1], ["U", 2]] as const) {
                 const index = gl.getUniformBlockIndex(program, name);

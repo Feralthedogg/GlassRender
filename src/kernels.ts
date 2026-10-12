@@ -5,10 +5,10 @@
  */
 
 import {
-    BLOCK_ROWS, FEATURE_ABERRATION, FEATURE_BITS, FEATURE_BLEED, FEATURE_CLAMP, FEATURE_CLAMP_HUE, FEATURE_EDGE, FEATURE_FACE,
-    FEATURE_FADE, FEATURE_FIELD, FEATURE_FILL, FEATURE_HOLD, FEATURE_LENS, FEATURE_LIGHTS, FEATURE_LUMA, FEATURE_OUTER,
+    BLOCK_ROWS, FEATURE_ABERRATION, FEATURE_BLEED, FEATURE_CLAMP, FEATURE_CLAMP_HUE, FEATURE_EDGE, FEATURE_FACE,
+    FEATURE_FIELD, FEATURE_FILL, FEATURE_HOLD, FEATURE_LENS, FEATURE_LIGHTS, FEATURE_LUMA, FEATURE_OUTER,
     FEATURE_RIM_HUE, FEATURE_RIM_SPLIT, FEATURE_RING, FEATURE_ROUND_NORMAL, FEATURE_SHADOW, FEATURE_SHADOW_SAMPLE, FEATURE_SHARP,
-    FEATURE_TINT, FEATURE_UNEVEN, FEATURE_VEIL, MEMBER_SHIFT, ROW_BLEED, ROW_BLEED_MATRIX, ROW_BLEED_MORE, ROW_BLUR, ROW_BOUNDS,
+    FEATURE_TINT, FEATURE_UNEVEN, MEMBER_SHIFT, ROW_BLEED, ROW_BLEED_MATRIX, ROW_BLEED_MORE, ROW_BLUR, ROW_BOUNDS,
     ROW_CLAMP, ROW_CLAMP_RECT, ROW_CORNER, ROW_DROP, ROW_EDGE, ROW_EDGE_MORE, ROW_EDGE_ROUND, ROW_FACE, ROW_FACE_MORE, ROW_FRAME,
     ROW_FRINGE, ROW_GRID, ROW_HOLD, ROW_KNOT, ROW_LENS, ROW_LENS_DIR, ROW_LENS_FADE, ROW_LENS_LAYER, ROW_MIX, ROW_RADII, ROW_REGION,
     ROW_RIM, ROW_RIM_ALPHA, ROW_RIM_FILL, ROW_RIM_FILL_MATRIX, ROW_RIM_FILL_MORE, ROW_RIM_KEY, ROW_RIM_KEY_MORE, ROW_RING,
@@ -240,11 +240,11 @@ export const FIELD_NORMAL_FRAGMENT = H_MIP + FIELD_PACKED + "uniform sampler2D u
     + "n=h2(n*hf(2.0019569396972656)-1.);}else n=h2(l>0.?sign(uZ.x)*n:vec2(0.,1.));o=vec4(d,n,1.);}";
 
 const NAMES = ["OUTER", "FILL", "FACE", "LUMA", "BLEED", "SHADOW", "SHADOW_SAMPLE", "RING", "EDGE", "HOLD", "CLAMP", "CLAMP_HUE",
-    "ABERRATION", "LIGHTS", "RIM_SPLIT", "RIM_HUE", "TINT", "LENS", "ROUND", "SHARP", "UNEVEN", "FIELD", "VEIL", "FADE"];
+    "ABERRATION", "LIGHTS", "RIM_SPLIT", "RIM_HUE", "TINT", "LENS", "ROUND", "SHARP", "UNEVEN", "FIELD"];
 const BITS = [FEATURE_OUTER, FEATURE_FILL, FEATURE_FACE, FEATURE_LUMA, FEATURE_BLEED, FEATURE_SHADOW, FEATURE_SHADOW_SAMPLE,
     FEATURE_RING, FEATURE_EDGE, FEATURE_HOLD, FEATURE_CLAMP, FEATURE_CLAMP_HUE, FEATURE_ABERRATION, FEATURE_LIGHTS,
     FEATURE_RIM_SPLIT, FEATURE_RIM_HUE, FEATURE_TINT, FEATURE_LENS, FEATURE_ROUND_NORMAL, FEATURE_SHARP, FEATURE_UNEVEN,
-    FEATURE_FIELD, FEATURE_VEIL, FEATURE_FADE];
+    FEATURE_FIELD];
 
 const R = (row: number): string => "m[" + row + "]";
 const BL = R(ROW_BLUR), LE = R(ROW_LENS), KN = R(ROW_KNOT), SL = R(ROW_SLOPE), DR = R(ROW_DROP), MX = R(ROW_MIX);
@@ -465,13 +465,13 @@ if(c.z==2.)return field(int(c.w),q*mb[i*5+3].xy+mb[i*5+3].zw,n);
 #endif
 return box(q,mb[i*5].zw,mb[i*5+1],c.xy,n);}
 // smooth union: k = spacing sat((1 - g_a.g_b) / 2); the direction is mixed, not normalised again
-float shape(vec2 p,out vec2 g){float d=1e4,lo=1e9,sp=${TX}.z;int s=0;g=vec2(0.);
+float shape(vec2 p,out vec2 g){float d=1e4,lo=1e9,sp=${TX}.z;int s=0,count=int(${TP}.w);g=vec2(0.);
 // a member replaces everything folded before it when those are all farther by more than the merge distance:
 // lower bound of the earlier ones (box distance, less sp/4 per fold) against its upper bound (box distance + half its
 // largest radius); a mask member has no such bound
-for(int i=1;i<GROUP;i++){vec2 e=abs(p-mb[i*5-5].xy)-mb[i*5-5].zw;lo=min(lo,max(e.x,e.y));
+for(int i=1;i<GROUP;i++){if(i>=count)break;vec2 e=abs(p-mb[i*5-5].xy)-mb[i*5-5].zw;lo=min(lo,max(e.x,e.y));
 e=abs(p-mb[i*5].xy)-mb[i*5].zw;if(mb[i*5+2].z<1.5&&lo-float(i-1)*.25*sp>=length(max(e,0.))+min(max(e.x,e.y),0.)+.52*mb[i*5+1].x+sp)s=i;}
-for(int i=s;i<GROUP;i++){vec2 q=p-mb[i*5].xy,e=abs(q)-mb[i*5].zw;
+for(int i=s;i<GROUP;i++){if(i>=count)break;vec2 q=p-mb[i*5].xy,e=abs(q)-mb[i*5].zw;
 if(max(e.x,e.y)>=d+sp)continue;
 vec2 n;float b=member(i,q,n);
 float k=max(sp*sat(.5-.5*dot(n,g)),1e-6),h=sat(.5+.5*(d-b)/k);d=mix(d,b,h)-k*h*(1.-h);g=mix(g,n,h);}
@@ -553,8 +553,8 @@ px.y=f[2].y-px.y;
 #endif
 #endif
 float s=f[0].x,kt=${CO}.w,T=${TX}.x;HT=${RN}.xy*(.5*T);
-#if !defined(OUTER) && !defined(FILL) && !defined(FACE) && !defined(BLEED) && !defined(SHADOW) && !defined(RING) && !defined(EDGE) && !defined(HOLD) && !defined(ABERRATION) && !defined(LIGHTS) && !defined(TINT) && !defined(LENS) && !defined(VEIL)
-if(${BL}.x==0.&&${LE}.x==0.){vec3 raw=bk(px).rgb;
+#if !defined(OUTER) && !defined(FILL) && !defined(FACE) && !defined(BLEED) && !defined(SHADOW) && !defined(RING) && !defined(EDGE) && !defined(HOLD) && !defined(ABERRATION) && !defined(LIGHTS) && !defined(TINT) && !defined(LENS)
+if(${BL}.x==0.&&${LE}.x==0.&&${TP}.y<=0.){vec3 raw=bk(px).rgb;
 #ifdef CLAMP
 #ifdef CLAMP_HUE
 float peak=max(raw.r,max(raw.g,raw.b));if(peak>${CM}.x)raw*=(${CM}.x/peak);
@@ -736,7 +736,7 @@ c=h3(c*hf(f[3].x));
 }
 #endif
 #ifdef VEIL
-c=mix(c,vec3(${TP}.x),${TP}.y*cov);
+if(${TP}.y>0.)c=mix(c,vec3(${TP}.x),${TP}.y*cov);
 #endif
 o=vec4(c,1.);}else o=r;
 #ifdef FADE
@@ -751,17 +751,20 @@ const PRELUDE = BLOCKS + "in vec2 vQ;in vec2 vU;flat in int vMode;uniform sample
  * @brief Fragment source of the glass program for a key: feature bits plus the member count of a
  * union above them.
  * @details With a member count, UNEVEN and FIELD mean that some members have corners of their own
- * or a mask outline.
+ * or a mask outline; the count is a bound, the block gives the members in use. The veil and the
+ * layer opacity come from the block at run time, so they need no program of their own; `fade`
+ * false leaves the opacity to a later composite.
  */
-export function glassFragment(key: number, edr = false, hdr = false, blend = false, nativeY = false, worldY = false): string {
-    let s = H_BODY;
+export function glassFragment(key: number, edr = false, hdr = false, blend = false, nativeY = false, worldY = false, fade = true): string {
+    let s = H_BODY + "#define VEIL\n";
+    if (fade) s += "#define FADE\n";
     if (edr) s += "#define EDR\n";
     if (hdr) s += "#define HDR_SCALE\n";
     if (blend) s += "#define HDR_BLEND\nuniform highp sampler2D uD;\n";
     if (nativeY) s += "#define NATIVE_Y\n";
     if (worldY) s += "#define WORLD_Y\n";
     if ((key >>> MEMBER_SHIFT) === 0 && (key & (FEATURE_FIELD | FEATURE_UNEVEN)) === 0) s += "#define GRID\n";
-    for (let i = 0; i < FEATURE_BITS; i++) if ((key & (BITS[i] as number)) !== 0) s += "#define " + (NAMES[i] as string) + "\n";
+    for (let i = 0; i < BITS.length; i++) if ((key & (BITS[i] as number)) !== 0) s += "#define " + (NAMES[i] as string) + "\n";
     const n = key >>> MEMBER_SHIFT;
     if (n > 0) s += "#define GROUP " + n + "\nlayout(std140) uniform U{vec4 mb[" + UNION_ROWS + "];};\n";
     // a single mask shape reads its field on unit 2; mask members of a union read theirs on units 2..5
@@ -806,7 +809,7 @@ export function rimFragment(key: number, edr = false, hdr = false, worldY = fals
 
 /** Background source RGBA on a transparent group, before any foreground layer or rim. */
 export function groupBodyFragment(key: number, edr = false, hdr = false, worldY = false): string {
-    return glassFragment(key & ~(FEATURE_LIGHTS | FEATURE_FADE), edr, hdr, false, true, worldY)
+    return glassFragment(key & ~FEATURE_LIGHTS, edr, hdr, false, true, worldY, false)
         .replace("if(cov>0.||hl>.000100017", "o=r;return;if(cov>0.||hl>.000100017");
 }
 

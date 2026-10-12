@@ -142,11 +142,12 @@ export abstract class Shapes extends State {
     // Shape rows, program and region demand of a slot.
     protected finish(slot: number): void {
         const g = this.geo, b = slot * G, d = this.blocks, o = slot * this.stride + MATERIAL_FLOATS;
-        const veil = g[b + 20] as number, fade = layerOpacity(g[b + 21] as number);
+        const veil = g[b + 20] as number, fade = layerOpacity(g[b + 21] as number), presence = this.ad[slot * A + 8] as number;
         let bits = this.packGeometry(slot);
         let p: WebGLProgram | null = null, key = -1;
         d[o + 36] = g[b + 19] as number; d[o + 37] = veil; d[o + 38] = fade;
-        if (bits >= 0 && fade > 0) {
+        // A hidden shape is not drawn: it needs no program (the plain material of presence 0 would be one of its own).
+        if (bits >= 0 && fade > 0 && presence > 0) {
             if (veil > 0) bits |= FEATURE_VEIL;
             if (fade < 1) bits |= FEATURE_FADE;
             /*
@@ -159,7 +160,7 @@ export abstract class Shapes extends State {
         }
         this.keys[slot] = p === null ? -1 : key;
         this.progs[slot] = p;
-        this.draws[slot] = p !== null && (this.ad[slot * A + 8] as number) > 0 ? 1 : 0;
+        this.draws[slot] = p !== null ? 1 : 0;
         this.touch(slot);
         this.layoutDirty = true;
     }
@@ -178,7 +179,7 @@ export abstract class Shapes extends State {
         d[o] = cx; d[o + 1] = cy; d[o + 2] = hx; d[o + 3] = hy;
         d[o + 4] = 0; d[o + 5] = 0; d[o + 6] = 0; d[o + 7] = s / T;
         d[o + 8] = 1; d[o + 9] = 1; d[o + 10] = hy > 0 ? hx / hy : 1;
-        d[o + 26] = 0;
+        d[o + 26] = 0; d[o + 39] = 0;
         if (geom === GEOM_BOX) {
             // a fully round end stays round while the frame is grown
             let r = g[b + 4] as number; r = r < 0 ? -r : r;
@@ -236,7 +237,9 @@ export abstract class Shapes extends State {
             const upper = g[b + 23] as number;
             let fp = Math.max(9 / s, Number.isFinite(upper) ? Math.max(Math.fround(upper + sp), aa + 2) : (g[b + 6] as number) + aa + 2);
             if (fp < sp + 2) fp = sp + 2;
-            bits = n << MEMBER_SHIFT;
+            // The program bounds its member loops by the next power of two; the block gives the count in use.
+            bits = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 4 ? 4 : n <= 8 ? 8 : 16) << MEMBER_SHIFT;
+            d[o + 39] = n;
             for (let i = 0; i < n; i++) {
                 const q = mo + i * MB, v = uo + i * MF, kind = m[q + 6] as number, ee = kind === MEMBER_FIELD ? 0 : em;
                 const mw = (m[q + 2] as number) * 0.5 + ee, mh = (m[q + 3] as number) * 0.5 + ee, smoothM = m[q + 5] === CORNER_SMOOTH;
@@ -356,33 +359,42 @@ export abstract class Shapes extends State {
             && ((key & FEATURE_FADE) === 0 || this.groupLayer(key));
     }
 
+    /*
+     * Program cache key of a shape key: the source key times 16 plus the output variant (EDR 1, HDR scale 2, blend 4,
+     * group layer 8). The veil and the layer opacity come from the block at run time and select no program; the rim
+     * and tint bits that separate passes take over leave the source.
+     */
+    protected programKey(key: number): number {
+        let body = this.separateRim(key) ? key & ~FEATURE_LIGHTS : key;
+        if (this.separateTint(key)) body &= ~FEATURE_TINT;
+        body &= ~(FEATURE_VEIL | FEATURE_FADE);
+        return body * 16 + (this.frame[14] !== 1 ? 1 : 0) + (this.frame[15] !== 0 ? 2 : 0) + (this.extended ? 4 : 0) + (this.groupLayer(key) ? 8 : 0);
+    }
+
     protected program(key: number): WebGLProgram | null {
-        const edr = this.frame[14] !== 1, hdr = this.frame[15] !== 0, blend = this.extended;
-        const cacheKey = key * 8 + (edr ? 1 : 0) + (hdr ? 2 : 0) + (blend ? 4 : 0);
-        const have = this.programs.get(cacheKey);
+        const c = this.programKey(key), have = this.programs.get(c);
         if (have !== undefined) return have;
-        const grid = (key >>> MEMBER_SHIFT) === 0 && (key & (FEATURE_FIELD | FEATURE_UNEVEN)) === 0;
-        const gl = this.gl;
-        let bodyKey = this.separateRim(key) ? key & ~FEATURE_LIGHTS : key;
-        if (this.separateTint(key)) bodyKey &= ~FEATURE_TINT;
+        const body = (c - (c & 15)) / 16, edr = (c & 1) !== 0, hdr = (c & 2) !== 0, blend = (c & 4) !== 0, members = body >>> MEMBER_SHIFT;
+        const grid = members === 0 && (body & (FEATURE_FIELD | FEATURE_UNEVEN)) === 0;
         // Keep the measured reflected-vertex context of the normalized HDR profile.
-        const world = blend && grid && !hdr;
-        const p = link(gl, world ? worldVertex() : shapeVertex(grid, blend), this.groupLayer(key) ? groupBodyFragment(bodyKey, edr, hdr, world) : glassFragment(bodyKey, edr, hdr, blend, blend, world));
+        const world = blend && grid && !hdr, gl = this.gl;
+        const p = link(gl, world ? worldVertex() : shapeVertex(grid, blend),
+            (c & 8) !== 0 ? groupBodyFragment(body, edr, hdr, world) : glassFragment(body, edr, hdr, blend, blend, world));
         if (p === null) return null;
         gl.uniformBlockBinding(p, gl.getUniformBlockIndex(p, "M"), 0);
         gl.uniformBlockBinding(p, gl.getUniformBlockIndex(p, "F"), 1);
-        if ((key >>> MEMBER_SHIFT) !== 0) gl.uniformBlockBinding(p, gl.getUniformBlockIndex(p, "U"), 2);
+        if (members !== 0) gl.uniformBlockBinding(p, gl.getUniformBlockIndex(p, "U"), 2);
         gl.useProgram(p);
         gl.uniform1ui(gl.getUniformLocation(p, "uHalfBarrier"), 0);
         gl.uniform1i(gl.getUniformLocation(p, "uP"), 0);
         gl.uniform1i(gl.getUniformLocation(p, "uB"), 1);
-        if ((key & FEATURE_TINT) !== 0) gl.uniform1i(gl.getUniformLocation(p, "uTintMask"), 7);
-        if (blend) gl.uniform1i(gl.getUniformLocation(p, "uD"), 6);
-        if ((key & FEATURE_FIELD) !== 0) {
-            if ((key >>> MEMBER_SHIFT) === 0) gl.uniform1i(gl.getUniformLocation(p, "uF"), 2);
+        if ((body & FEATURE_TINT) !== 0) gl.uniform1i(gl.getUniformLocation(p, "uTintMask"), 7);
+        if ((c & 4) !== 0) gl.uniform1i(gl.getUniformLocation(p, "uD"), 6);
+        if ((body & FEATURE_FIELD) !== 0) {
+            if (members === 0) gl.uniform1i(gl.getUniformLocation(p, "uF"), 2);
             else for (let k = 0; k < MMF; k++) gl.uniform1i(gl.getUniformLocation(p, "uF" + k), 2 + k);
         }
-        this.programs.set(cacheKey, p);
+        this.programs.set(c, p);
         return p;
     }
 }

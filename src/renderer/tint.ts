@@ -4,7 +4,7 @@
  * Other effect combinations retain the existing path until their ordering is validated.
  */
 import {GROUP_VERTEX,RIM_VERTEX,sdfFillMaskFragment,tintForegroundFragment,tintCompositeFragment} from "../kernels.js";
-import {ROW_CORNER,SMOOTH_REACH} from "../layout.js";
+import {FEATURE_FADE,FEATURE_VEIL,ROW_CORNER,SMOOTH_REACH} from "../layout.js";
 import {fma32} from "../precision.js";
 import {boxEffectMesh,BOX_CORNER_INDICES,BOX_FILL_INDICES,BOX_QUAD_INDICES} from "./effect-mesh.js";
 import {A,G} from "./lanes.js";
@@ -49,10 +49,12 @@ export abstract class Tint extends Group {
         const gl=this.gl,scene=this.sceneFbo,viewport=gl.getParameter(gl.VIEWPORT) as Int32Array;
         const scissored=gl.isEnabled(gl.SCISSOR_TEST),scissor=gl.getParameter(gl.SCISSOR_BOX) as Int32Array;
         try{
-            let programs=this.tintPrograms.get(key);
-            if(!programs){const fill=link(gl,RIM_VERTEX,sdfFillMaskFragment(key)),foreground=link(gl,RIM_VERTEX,tintForegroundFragment(key,true,this.groupLayer(key),true));
+            // The veil and the layer opacity are not part of the tint sources; a group layer composites differently.
+            const source=key&~(FEATURE_VEIL|FEATURE_FADE),layer=this.groupLayer(key),cacheKey=source*2+(layer?1:0);
+            let programs=this.tintPrograms.get(cacheKey);
+            if(!programs){const fill=link(gl,RIM_VERTEX,sdfFillMaskFragment(source)),foreground=link(gl,RIM_VERTEX,tintForegroundFragment(source,true,layer,true));
                 if(!fill||!foreground){gl.deleteProgram(fill);gl.deleteProgram(foreground);return;}
-                programs=[fill,foreground];this.tintPrograms.set(key,programs);
+                programs=[fill,foreground];this.tintPrograms.set(cacheKey,programs);
                 for(const p of programs){for(const[name,binding]of[["M",0],["F",1],["U",2]] as const){const i=gl.getUniformBlockIndex(p,name);if(i!==gl.INVALID_INDEX)gl.uniformBlockBinding(p,i,binding);}
                     gl.useProgram(p);gl.uniform1ui(gl.getUniformLocation(p,"uHalfBarrier"),0);gl.uniform1f(gl.getUniformLocation(p,"uOffset"),-.5);}
                 gl.useProgram(foreground);gl.uniform1i(gl.getUniformLocation(foreground,"uTintBackdrop"),6);gl.uniform1i(gl.getUniformLocation(foreground,"uTintMask"),7);gl.uniform1i(gl.getUniformLocation(foreground,"uTintFill"),8);gl.uniform1i(gl.getUniformLocation(foreground,"uTintUnderlying"),10);
