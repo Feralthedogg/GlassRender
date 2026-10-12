@@ -72,5 +72,35 @@
 !/demo/solid/README.md
 !/demo/solid/LICENSE
 
+# Public tests, the benchmark and the headless Chrome driver they share.
+!/test/
+/test/*
+!/test/catalog.test.mjs
+!/test/shaders.test.mjs
+!/test/layer-opacity.test.mjs
+!/test/browser/
+/test/browser/*
+!/test/browser/run.mjs
+!/test/browser/harness.mjs
+!/test/browser/functional.mjs
+!/test/browser/functional.html
+!/test/browser/adapters.mjs
+!/test/browser/seed.mjs
+!/test/browser/surface-state.mjs
+!/test/browser/hdr-pixels.mjs
+!/test/browser/prop-updates.mjs
+!/test/browser/display-brightness.mjs
+!/test/browser/hdr-destination-optics.mjs
+!/test/browser/hdr-rim-runtime.mjs
+!/test/browser/tint-support-destination.mjs
+!/tools/
+/tools/*
+!/tools/chrome.mjs
+!/bench/
+/bench/*
+!/bench/index.html
+!/bench/run.mjs
+!/bench/scenes.mjs
+
 # Finder metadata
 .DS_Store

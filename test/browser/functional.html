@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GlassRender functional tests</title>
+<style>body { font: 13px ui-monospace, monospace; margin: 16px; } a { display: block; margin-bottom: 8px; }</style>
+</head>
+<body>
+<a href="?run">run the tests</a>
+<script type="module">
+import { install } from "./harness.mjs";
+import { FUNCTIONAL } from "./functional.mjs";
+install(FUNCTIONAL);
+</script>
+</body>
+</html>

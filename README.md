@@ -506,6 +506,17 @@ npm --prefix demo/solid run demo -- --host 127.0.0.1 --strictPort
 
 Each framework server also provides `/quick-start.html`. These repository commands run local demo sources; the npm commands in [Install](#install) are for adding GlassRender to your own app.
 
+## Tests
+
+```sh
+npm test                 # type-checked build and the Node tests
+npm run test:browser     # functional tests in headless Chrome
+npm run test:adapters    # React, Svelte, Vue and Solid input tests (after `npm ci` in each demo folder)
+npm run bench            # frame cost of the benchmark scenes
+```
+
+The browser tests and the benchmark start Chrome from its usual install location or from the `CHROME` environment variable. Extra Chrome switches come from `CHROME_FLAGS`. On a machine without a GPU, `--use-angle=swiftshader --enable-unsafe-swiftshader` selects the software renderer, which is much slower. Continuous integration runs the Node tests, a subset of the browser tests on that renderer, and the adapter type checks and builds.
+
 ## Project layout
 
 ```text
@@ -515,6 +526,9 @@ demo/svelte/ glassrender-svelte and Svelte demo
 demo/vue/    glassrender-vue and Vue demo
 demo/solid/  glassrender-solid and Solid demo
 examples/   the core playground, the quick start and the assets the demos share
+test/       Node tests, and functional and adapter tests run in headless Chrome
+bench/      benchmark scenes and their headless Chrome runner
+tools/      the headless Chrome driver shared by tests and benchmark
 api.md      the API guide
 ```
 

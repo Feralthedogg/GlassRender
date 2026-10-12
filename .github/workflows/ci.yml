@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    name: Core
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # The runner has no GPU: WebGL runs on the SwiftShader software renderer, which is slow for these shaders, so
+      # this step runs the functional tests that draw few frames. Run the whole suite with `npm run test:browser` on a
+      # machine with a GPU; some comparisons there allow one level of rounding that the software renderer can exceed.
+      - name: Browser tests (software WebGL)
+        env:
+          CHROME_FLAGS: --no-sandbox --use-angle=swiftshader --enable-unsafe-swiftshader
+        run: >-
+          npm run test:browser --
+          "named options draw|groups: members with|a mask shape, moved|chromatic defaults|chromatic slot state|built-in materials: removed|followed elements get|auto surroundings follow|a lost context comes back|a followed element is measured|frames are skipped|pressing, opacity and group|overlap stacking draws|radius reset restores|null backdrop removes"
+
+  adapter:
+    name: Adapter (${{ matrix.adapter }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        adapter: [react, svelte, vue, solid]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            demo/${{ matrix.adapter }}/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm ci
+        working-directory: demo/${{ matrix.adapter }}
+      - run: npm run check
+        working-directory: demo/${{ matrix.adapter }}
+      - run: npm run ${{ matrix.adapter == 'svelte' && 'package' || 'build' }}
+        working-directory: demo/${{ matrix.adapter }}
+      - run: npm run build:demo
+        working-directory: demo/${{ matrix.adapter }}
+
+  adapter-input:
+    name: Adapter input tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            demo/*/package-lock.json
+      - run: npm ci
+      - run: |
+          for adapter in react svelte vue solid; do npm --prefix demo/$adapter ci; done
+      - name: Input tests (software WebGL)
+        env:
+          CHROME_FLAGS: --no-sandbox --use-angle=swiftshader --enable-unsafe-swiftshader
+        run: npm run test:adapters
