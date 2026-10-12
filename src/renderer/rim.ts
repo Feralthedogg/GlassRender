@@ -83,7 +83,7 @@ export abstract class Rim extends World {
             const maxHeight = Math.max(d[o + ROW_RIM_KEY * 4 + 2] as number, d[o + ROW_RIM_KEY_MORE * 4 + 1] as number,
                 d[o + ROW_RIM_FILL * 4] as number, d[o + ROW_RIM_FILL * 4 + 3] as number);
             const offset = d[o + ROW_RIM_FILL_MORE * 4 + 3] as number;
-            // Native type8 returns separate outside/inside ranges. With smoothness 8 and
+            // The rim effect has separate outside and inside ranges. With smoothness 8 and
             // Gaussian radius 0, light heights extend inward; only negative offsets extend
             // the outside range. Preserve each Float store before packing the mesh.
             const padding = Math.fround(9 - Math.min(offset, 0));

@@ -21,5 +21,5 @@ export const BOX_FILL_INDICES = new Uint16Array([
     5, 6, 10, 10, 9, 5
 ]);
 
-/** One original fixed-image quad when both inner subdivision spans collapse. */
+/** One quad over the whole effect when both inner subdivision spans collapse. */
 export const BOX_QUAD_INDICES = new Uint16Array([0, 3, 15, 15, 12, 0]);

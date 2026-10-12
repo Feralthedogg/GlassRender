@@ -25,7 +25,7 @@ export interface DisplayBrightness {
 
 /**
  * @brief Resolve available or requested headroom from explicit display brightness values.
- * @details Uses the verified CBEDR sanity, available and capped arithmetic. Physical state
+ * @details Uses the verified display-brightness sanity, available and capped arithmetic. Physical state
  * discovery, modulators and ramp scheduling remain the host's responsibility.
  */
 export function resolveDisplayHeadroom(state: DisplayBrightness): Result<number> {
