@@ -207,7 +207,7 @@ glass.setAppearance("dark");
 | `setExtendedRange(on, headroom?)` | `boolean` | Sets extended range and returns whether it is active now. |
 | `setDisplayBrightness(state)` | `Result<number>` | Resolves host-supplied brightness state into display headroom without changing the selected output range. Invalid input preserves the prior headroom and frame. |
 | `resize(width?, height?, ratio?)` | `void` | Sets the buffer size from CSS dimensions and pixel ratio. With no arguments, reads the DOM size and device ratio. |
-| `render(now?)` | `void` | Processes a frame immediately. `now` is in milliseconds. |
+| `render(now?)` | `void` | Draws a frame immediately, even when nothing changed. `now` is in milliseconds. Frames scheduled by the glass itself are skipped while nothing changes. |
 | `update()` | `void` | Schedules a frame after direct changes to the low-level renderer. |
 | `destroy()` | `void` | Cancels frame requests, releases observers and frees GPU resources. |
 
@@ -985,11 +985,16 @@ const handle = renderer.addShape(48, 48, 320, 160, 24, CORNER_SMOOTH, SCHEME_LIG
 renderer.setPresence(handle, 0);
 renderer.animatePresence(handle, 1);
 
-let frameId = 0;
+let frameId = 0, busy = false;
 const draw = (now: number) => {
     frameId = 0;
+    // Nothing changed and nothing runs: the canvas keeps showing the last frame.
+    if (!busy && !renderer.needsRender()) return;
+    // A transition that starts after skipped frames starts at this frame.
+    if (!busy) renderer.restartClock();
     // true means a transition or luminance reading needs another frame.
-    if (renderer.render(now)) frameId = requestAnimationFrame(draw);
+    busy = renderer.render(now);
+    if (busy) frameId = requestAnimationFrame(draw);
 };
 frameId = requestAnimationFrame(draw);
 
@@ -1036,6 +1041,8 @@ In the following tables, `h` is a glass handle and `i` is a group member index. 
 | `Renderer.create(gl)`, `createRenderer(gl)` | Returns `Result<Renderer>`. |
 | `resize(width, height, scale)` | Sets output dimensions in device pixels and scale in device pixels per point. Also set the canvas's `width` and `height` yourself. |
 | `render(now?)` | Draws into the default framebuffer. Returns `true` if another frame is needed. Time is in milliseconds. |
+| `needsRender()` | Returns `true` when an input, the backdrop, the output range or an open luminance reading changed what `render()` would draw. When it is `false` and the last `render()` returned `false`, you can skip the frame: the canvas keeps showing the last one. |
+| `restartClock()` | Makes the next `render()` advance no transition time. Call it before the first frame after skipped frames so a transition starting then does not jump. |
 | `restore()` | Recreates GPU objects after context restoration. Success is a `Result<number>` with value `0`. |
 | `dispose()` | Releases the GPU objects it created. Caller-supplied backdrop textures remain the caller's responsibility. |
 

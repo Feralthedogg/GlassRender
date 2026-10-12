@@ -340,6 +340,27 @@ export abstract class Frame extends Tint {
     }
 
     /**
+     * @brief Whether `render` would draw something the last frame does not show: a changed input,
+     * the backdrop, the output range or an open luminance reading.
+     * @details A running transition is reported by the return value of `render` instead. When this
+     * is false and the last `render` returned false, skipping the frame leaves the canvas showing
+     * the last one.
+     */
+    needsRender(): boolean {
+        return this.stale || this.backdropDirty || this.frameDirty || this.layoutDirty || this.maskDirty || this.sync !== null;
+    }
+
+    /**
+     * @brief Start the transition clock again: the next `render` advances nothing, and later frames
+     * advance by their time since that one.
+     * @details Call it before the first frame after idle frames that were not rendered, so a
+     * transition starting then does not take the idle time as its first step.
+     */
+    restartClock(): void {
+        this.lastTime = -1;
+    }
+
+    /**
      * @brief Finish tone and visibility transitions before producing a settled frame.
      * @details Renders once and performs blocking luminance reads for adaptive shapes. Use before
      * `render` when the next frame must show the final state.

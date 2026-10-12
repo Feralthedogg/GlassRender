@@ -64,6 +64,8 @@ export class Glass {
     private frameId: number;
     private measure: boolean;
     private reorder: boolean;
+    // The last frame asked for another one (a transition or a reading runs).
+    private busy: boolean;
     private lost: boolean;
     private destroyed: boolean;
     /** @brief Why the glass could not be rebuilt after the context came back ("" otherwise). */
@@ -81,7 +83,7 @@ export class Glass {
         this.followers = new Followers((): void => { this.measure = true; this.update(); });
         this.backdrop = new Backdrop((): void => { this.upload(); this.update(); }, o.fit ?? "cover", o.live ?? false);
         this.surroundings = new Surroundings((): void => { this.surroundingsChanged(); });
-        this.onFrame = (now: number): void => { this.tick(now); };
+        this.onFrame = (now: number): void => { this.tick(now, false); };
         this.onResolution = (): void => { this.watchResolution(); this.resize(); };
         this.onLost = (event: Event): void => { this.whenLost(event); };
         this.onRestored = (): void => { this.whenRestored(); };
@@ -106,6 +108,7 @@ export class Glass {
         this.frameId = 0;
         this.measure = false;
         this.reorder = false;
+        this.busy = false;
         this.lost = false;
         this.destroyed = false;
         this.error = "";
@@ -303,7 +306,7 @@ export class Glass {
     render(now?: number): void {
         if (this.destroyed || this.lost) return;
         if (this.frameId !== 0) { cancelAnimationFrame(this.frameId); this.frameId = 0; }
-        this.tick(now ?? performance.now());
+        this.tick(now ?? performance.now(), true);
     }
 
     /** @brief Ask for a frame (after low-level calls on `renderer`). */
@@ -378,14 +381,22 @@ export class Glass {
         this.followers.remove(f);
     }
 
-    private tick(now: number): void {
+    // `force` draws even when nothing changed (an explicit `render`).
+    private tick(now: number, force: boolean): void {
         this.frameId = 0;
         if (this.destroyed || this.lost) return;
-        const fs = this.followers, live = this.backdrop.live;
+        const fs = this.followers, live = this.backdrop.live, r = this.renderer;
         if ((this.measure || fs.everyFrame) && fs.size > 0) { this.measure = false; fs.measure(this.canvas); }
         if (this.reorder) this.order();
         if (live) this.upload();
-        let more = this.renderer.render(now);
+        let more = false;
+        // Without a change since the last frame the canvas keeps showing it.
+        if (force || this.busy || r.needsRender()) {
+            // A transition that starts after idle frames starts at this frame.
+            if (!force && !this.busy) r.restartClock();
+            more = r.render(now);
+        }
+        this.busy = more;
         const lv = this.leaving;
         for (let i = 0; i < lv.length; i++) {
             const it = lv[i] as GlassItem;
