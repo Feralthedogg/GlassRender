@@ -46,6 +46,11 @@ export abstract class State {
     protected readonly programs: Map<number, WebGLProgram>;
     // Links started ahead of use (see `prewarm`), by program cache key.
     protected readonly warming: Map<number, LinkJob>;
+    // Programs `warm` has not drawn with yet, and the primitive mode their shapes are drawn in. Each draws nothing
+    // once there, so the driver builds its pipeline.
+    protected readonly fresh: WebGLProgram[];
+    protected readonly freshMode: number[];
+    protected warmUbo: WebGLBuffer | null;
     protected readonly rimPrograms = new Map<number, { program: WebGLProgram; mode: WebGLUniformLocation | null; projection: WebGLUniformLocation | null }>();
     protected rimVao: WebGLVertexArrayObject | null = null;
     protected rimVertexBuffer: WebGLBuffer | null = null;
@@ -191,6 +196,9 @@ export abstract class State {
         this.frame[2] = 1; this.frame[10] = 1;
         this.programs = new Map<number, WebGLProgram>();
         this.warming = new Map<number, LinkJob>();
+        this.fresh = [];
+        this.freshMode = [];
+        this.warmUbo = null;
         this.maxTex = maxTex;
         this.strideBytes = strideBytes;
         this.stride = strideBytes >> 2;

@@ -14,7 +14,7 @@ import {
     A, ADAPT_FIRST, ADAPT_LIVE, ADAPT_OFF, B, C, edge, F, FIELD_BITS, FIELD_RANGE, G, GEN_MASK, GEN_SHIFT, GEOM_BOX, GEOM_FIELD, GEOM_UNEVEN, GEOM_UNION,
     MATERIAL_DARK, MAXL, MB, MF, MMF, R
 } from "./lanes.js";
-import { finishLink, startLink, type LinkJob } from "./shared.js";
+import { finishLink, linkDone, startLink, type LinkJob } from "./shared.js";
 import { fma32, layerOpacity } from "../precision.js";
 import { vibrantClamp } from "../hdr.js";
 import { tintGradientMask } from "../gradient.js";
@@ -395,7 +395,12 @@ export abstract class Shapes extends State {
         // A link started ahead (see `prewarm`) is usually done by now; otherwise this waits for it.
         const job = this.warming.get(c);
         if (job !== undefined) this.warming.delete(c);
-        const p = finishLink(this.gl, job !== undefined ? job : this.startProgram(c));
+        return this.finishProgram(c, job !== undefined ? job : this.startProgram(c));
+    }
+
+    // Take the program of a started link into the cache, with its blocks and samplers bound.
+    protected finishProgram(c: number, job: LinkJob | null): WebGLProgram | null {
+        const p = finishLink(this.gl, job);
         if (p === null) return null;
         const gl = this.gl, body = (c - (c & 15)) / 16, members = body >>> MEMBER_SHIFT;
         gl.uniformBlockBinding(p, gl.getUniformBlockIndex(p, "M"), 0);
@@ -412,7 +417,20 @@ export abstract class Shapes extends State {
             else for (let k = 0; k < MMF; k++) gl.uniform1i(gl.getUniformLocation(p, "uF" + k), 2 + k);
         }
         this.programs.set(c, p);
+        // boxes are drawn as a list of grid triangles, other outlines as a strip
+        this.fresh.push(p); this.freshMode.push(members === 0 && (body & (FEATURE_FIELD | FEATURE_UNEVEN)) === 0 ? 4 : 5);
         return p;
+    }
+
+    // Take the links started ahead that are done into the cache; returns true while some still run.
+    protected promote(): boolean {
+        const gl = this.gl, parallel = this.parallel, warming = this.warming;
+        for (const [c, job] of warming) {
+            if (!linkDone(gl, job, parallel)) continue;
+            warming.delete(c);
+            this.finishProgram(c, job);
+        }
+        return warming.size > 0;
     }
 
     /*
@@ -424,6 +442,9 @@ export abstract class Shapes extends State {
         const c = this.programKey(key);
         if (this.programs.has(c) || this.warming.has(c)) return;
         const job = this.startProgram(c);
-        if (job !== null) this.warming.set(c, job);
+        if (job === null) return;
+        this.warming.set(c, job);
+        // Send the link now, so it runs while the page is idle and not when the next frame is sent.
+        this.gl.flush();
     }
 }

@@ -57,7 +57,8 @@ export class Renderer extends Frame {
         const gl = this.gl;
         if (gl.isContextLost()) return err("the context is still lost");
         // Lost-context objects are already invalid; clear references without deleting them.
-        this.programs.clear(); this.warming.clear(); this.progs.fill(null); this.kit.fill(null); this.kitLoc.fill(null);
+        this.programs.clear(); this.warming.clear(); this.fresh.length = 0; this.freshMode.length = 0; this.warmUbo = null;
+        this.progs.fill(null); this.kit.fill(null); this.kitLoc.fill(null);
         this.dropRim(false);
         this.dropGroup(false);
         this.dropTintMask(false);
@@ -832,7 +833,8 @@ export class Renderer extends Frame {
         for (const p of this.programs.values()) gl.deleteProgram(p);
         this.programs.clear();
         for (const job of this.warming.values()) dropLink(gl, job);
-        this.warming.clear();
+        this.warming.clear(); this.fresh.length = 0; this.freshMode.length = 0;
+        gl.deleteBuffer(this.warmUbo); this.warmUbo = null;
         this.progs.fill(null);
     }
 }

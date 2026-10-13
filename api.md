@@ -1049,6 +1049,7 @@ In the following tables, `h` is a glass handle and `i` is a group member index. 
 | `render(now?)` | Draws into the default framebuffer. Returns `true` if another frame is needed. Time is in milliseconds. |
 | `needsRender()` | Returns `true` when an input, the backdrop, the output range or an open luminance reading changed what `render()` would draw. When it is `false` and the last `render()` returned `false`, you can skip the frame: the canvas keeps showing the last one. |
 | `restartClock()` | Makes the next `render()` advance no transition time. Call it before the first frame after skipped frames so a transition starting then does not jump. |
+| `needsWarm()`, `warm()` | `warm()` finishes program links started ahead and draws nothing once with one new program, so the driver builds its pipeline before the first real draw. Call it between frames while `needsWarm()` is true and nothing animates; it returns `true` while work is left. `createGlass()` does this on its own after about 150 ms without a frame. |
 | `restore()` | Recreates GPU objects after context restoration. Success is a `Result<number>` with value `0`. |
 | `dispose()` | Releases the GPU objects it created. Caller-supplied backdrop textures remain the caller's responsibility. |
 
@@ -1401,7 +1402,7 @@ glass.add(options);
 | Video or canvas updates do not appear | Check `live: true`. With `Renderer`, manage uploads or dirty notifications and frame requests yourself. |
 | Removing a backdrop | `setBackdrop(null)`, `clearBackdrop()` and the component canvas's `backdrop={null}` remove uploaded pixels and retained sources. |
 | Text remains when the glass is hidden | `visible` controls the glass effect. Manage DOM visibility in your app. |
-| The first use of a material pauses briefly | The browser compiles the shaders of each new combination of preset, tint, outline kind and group size the first time it is drawn. Pressing, opacity and adding group members up to the next of 1, 2, 4, 8 and 16 reuse compiled shaders, and where the browser compiles in the background the tinted variant and the next group size are prepared ahead. Show the presets a page needs once at load time (for example hidden) to compile them before interaction. |
+| The first use of a material pauses briefly | The browser compiles the shaders of each new combination of preset, tint, outline kind and group size the first time it is made. Pressing, opacity and adding group members up to the next of 1, 2, 4, 8 and 16 reuse compiled shaders. Between frames the glass prepares what it expects next: the programs of hidden shapes, and where the browser compiles in the background the tinted variant and the next group size. Add the presets a page needs at load time, hidden with `visible: false`, to have them ready before interaction. |
 | Many overlapping shapes are slow | The default `stacking: "overlap"` already keeps glass placed side by side from waiting for its neighbours; `stacking: "flat"` makes each shape read only the original backdrop. Adjust output resolution with `maxPixelRatio`. |
 | Direct renderer changes do not appear | After changing `glass.renderer`, call `glass.update()`. With a standalone `Renderer`, schedule a render frame. |
 | Extended range stays disabled | Check the initial creation option and browser output support, and read the actual return value. |

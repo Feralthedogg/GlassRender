@@ -30,7 +30,7 @@ jobs:
           CHROME_FLAGS: --no-sandbox --use-angle=swiftshader --enable-unsafe-swiftshader
         run: >-
           npm run test:browser --
-          "named options draw|groups: members with|a mask shape, moved|chromatic defaults|chromatic slot state|built-in materials: removed|followed elements get|auto surroundings follow|a lost context comes back|a followed element is measured|frames are skipped|pressing, opacity and group|overlap stacking draws|radius reset restores|null backdrop removes"
+          "named options draw|groups: members with|a mask shape, moved|chromatic defaults|chromatic slot state|built-in materials: removed|followed elements get|auto surroundings follow|a lost context comes back|a followed element is measured|frames are skipped|pressing, opacity and group|overlap stacking draws|radius reset restores|null backdrop removes|an update with a rejected preset|a full group reports|programs are prepared|a partial redraw equals"
 
   adapter:
     name: Adapter (${{ matrix.adapter }})

@@ -20,6 +20,9 @@ import type {
     Appearance, EnvironmentOptions, Fit, Follow, GlassOptions, GroupOptions, ShapeOptions, StackingMode
 } from "./types.js";
 
+// Quiet time after the last frame before a program is prepared ahead, and between two of them, in milliseconds.
+const WARM_DELAY = 150;
+
 // How a browser lets a canvas show values above standard white (a proposed interface available in some browsers).
 type RangeCanvas = HTMLCanvasElement & { configureHighDynamicRange?: (options: { mode: string }) => void };
 
@@ -41,6 +44,7 @@ export class Glass {
     private readonly backdrop: Backdrop;
     private readonly surroundings: Surroundings;
     private readonly onFrame: FrameRequestCallback;
+    private readonly onWarm: () => void;
     private readonly onResolution: () => void;
     private readonly onLost: (event: Event) => void;
     private readonly onRestored: () => void;
@@ -62,6 +66,9 @@ export class Glass {
     private ratio: number;
     private readonly maxRatio: number;
     private frameId: number;
+    private warmId: number;
+    // When the last frame was drawn (performance.now()).
+    private drawn: number;
     private measure: boolean;
     private reorder: boolean;
     // The last frame asked for another one (a transition or a reading runs).
@@ -84,6 +91,7 @@ export class Glass {
         this.backdrop = new Backdrop((): void => { this.upload(); this.update(); }, o.fit ?? "cover", o.live ?? false);
         this.surroundings = new Surroundings((): void => { this.surroundingsChanged(); });
         this.onFrame = (now: number): void => { this.tick(now, false); };
+        this.onWarm = (): void => { this.warm(); };
         this.onResolution = (): void => { this.watchResolution(); this.resize(); };
         this.onLost = (event: Event): void => { this.whenLost(event); };
         this.onRestored = (): void => { this.whenRestored(); };
@@ -106,6 +114,8 @@ export class Glass {
         this.ratio = 1;
         this.maxRatio = o.maxPixelRatio !== undefined && o.maxPixelRatio > 0 ? o.maxPixelRatio : 2;
         this.frameId = 0;
+        this.warmId = 0;
+        this.drawn = 0;
         this.measure = false;
         this.reorder = false;
         this.busy = false;
@@ -322,6 +332,8 @@ export class Glass {
         this.destroyed = true;
         if (this.frameId !== 0) cancelAnimationFrame(this.frameId);
         this.frameId = 0;
+        if (this.warmId !== 0) clearTimeout(this.warmId);
+        this.warmId = 0;
         this.canvas.removeEventListener("webglcontextlost", this.onLost);
         this.canvas.removeEventListener("webglcontextrestored", this.onRestored);
         if (this.resolutionQuery !== null) this.resolutionQuery.removeEventListener("change", this.onResolution);
@@ -395,6 +407,7 @@ export class Glass {
             // A transition that starts after idle frames starts at this frame.
             if (!force && !this.busy) r.restartClock();
             more = r.render(now);
+            this.drawn = performance.now();
         }
         this.busy = more;
         const lv = this.leaving;
@@ -411,6 +424,17 @@ export class Glass {
         const its = this.items;
         for (let i = 0; i < its.length; i++) (its[i] as GlassItem).sync();
         if (more || live || fs.everyFrame) this.update();
+        else if (this.warmId === 0 && r.needsWarm()) this.warmId = setTimeout(this.onWarm, WARM_DELAY);
+    }
+
+    // Between frames: finish the programs linked ahead and let the driver build the pipelines of new ones.
+    private warm(): void {
+        this.warmId = 0;
+        if (this.destroyed || this.lost) return;
+        // A frame is on its way: it must not wait for a pipeline; the tick that draws it asks again.
+        if (this.frameId !== 0) return;
+        // Frames were drawn a moment ago (an interaction may be going on): wait until it has been quiet.
+        if (performance.now() - this.drawn < WARM_DELAY || this.renderer.warm()) this.warmId = setTimeout(this.onWarm, WARM_DELAY);
     }
 
     // Draw items that follow elements in document order (nested boxes draw over their parents), above coordinate-based

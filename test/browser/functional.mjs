@@ -625,6 +625,24 @@ export const FUNCTIONAL = {
         glass.destroy();
     },
 
+    "programs are prepared between frames without changing the picture": async () => {
+        const glass = makeGlass(), r = glass.renderer, gl = glass.canvas.getContext("webgl2");
+        glass.add({ x: 40, y: 40, width: 300, height: 160, radius: 24, transition: "none" });
+        const hidden = glass.add({ x: 380, y: 60, width: 120, height: 44, preset: "control", visible: false, transition: "none" });
+        const group = glass.addGroup({ spacing: 12, transition: "none" });
+        group.add({ x: 60, y: 260, width: 60, height: 60 }); group.add({ x: 130, y: 260, width: 60, height: 60 });
+        const before = frameOf(glass);
+        truthy(r.needsWarm(), "new programs wait for their pipelines");
+        // one program a call; links started ahead (where the browser links in the background) finish on their own time
+        for (let calls = 0; r.needsWarm() && calls < 600; calls++) { r.warm(); await tick(20); }
+        equal(r.needsWarm(), false, "every program is prepared");
+        equal(gl.getError(), 0, "preparing raises no GL error");
+        equal(distance(before, frameOf(glass)), 0, "the picture is unchanged");
+        hidden.show();
+        truthy(distance(before, frameOf(glass)) > 0, "the hidden shape shows with its prepared program");
+        glass.destroy();
+    },
+
     "a partial redraw equals a full redraw in every stacking mode": () => {
         for (const mode of [STACKING_EXACT, STACKING_OVERLAP, STACKING_FLAT]) {
             const canvas = document.createElement("canvas");

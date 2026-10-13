@@ -341,6 +341,55 @@ export abstract class Frame extends Tint {
     }
 
     /**
+     * @brief Whether `warm` has work: programs linked ahead that may be done, or new programs whose
+     * pipeline the driver has not built yet.
+     */
+    needsWarm(): boolean {
+        return this.warming.size > 0 || this.fresh.length > 0;
+    }
+
+    /**
+     * @brief Finish the program links started ahead that are done, and draw nothing once with every
+     * new program so the driver builds its pipeline before its first real draw (a pause of about
+     * 0.1 s otherwise).
+     * @details Call it between frames, when nothing animates: it changes no pixel and needs no
+     * frame, but the driver is busy while it builds a pipeline, so each call draws with one program
+     * only. Extended-range programs are only finished, not drawn.
+     * @returns True while links started ahead are still running or programs are left to draw with;
+     * call again later.
+     */
+    warm(): boolean {
+        const gl = this.gl, fresh = this.fresh, modes = this.freshMode;
+        if (gl.isContextLost()) return false;
+        const running = this.promote();
+        if (fresh.length === 0) return running;
+        if (this.extended) { fresh.length = 0; modes.length = 0; return running; }
+        // No scene yet: the first frame draws them or leaves them for the next call.
+        if (this.sceneFbo === null) return running;
+        if (this.warmUbo === null) {
+            // A block of zeros puts every vertex of a shape in one point, so no pixel is drawn.
+            const zeros = gl.createBuffer() as WebGLBuffer | null;
+            if (zeros === null) { fresh.length = 0; modes.length = 0; return running; }
+            gl.bindBuffer(0x8a11, zeros); gl.bufferData(0x8a11, UNION_BYTES > BLOCK_BYTES ? UNION_BYTES : BLOCK_BYTES, 0x88e4);
+            this.warmUbo = zeros;
+        }
+        // The state of a shape draw in standard range: the scene, premultiplied blending, the base vertex array.
+        gl.bindFramebuffer(0x8d40, this.sceneFbo); gl.viewport(0, 0, this.width, this.height);
+        gl.bindBufferBase(0x8a11, 1, this.frameUbo);
+        gl.bindBufferRange(0x8a11, 0, this.warmUbo, 0, BLOCK_BYTES); gl.bindBufferRange(0x8a11, 2, this.warmUbo, 0, UNION_BYTES);
+        gl.bindVertexArray(this.vao); gl.enable(0x0be2); gl.blendFunc(1, 0x0303); this.clipOff();
+        // Shapes read the copy on unit 1; the scene shown there after a frame would be read while drawn into.
+        gl.activeTexture(0x84c1); gl.bindTexture(0x0de1, this.copyTex); gl.activeTexture(0x84c0);
+        const last = fresh.length - 1, mode = modes[last] as number;
+        gl.useProgram(fresh[last] as WebGLProgram); gl.drawArrays(mode, 0, mode === 4 ? 3 : 4);
+        gl.disable(0x0be2);
+        // Send it now: without a frame the commands would wait for the next one, which would then wait for the pipeline.
+        gl.flush();
+        fresh.length = last; modes.length = last;
+        return running || last > 0;
+    }
+
+    /**
      * @brief Whether `render` would draw something the last frame does not show: a changed input,
      * the backdrop, the output range or an open luminance reading.
      * @details A running transition is reported by the return value of `render` instead. When this
