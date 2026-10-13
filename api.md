@@ -1389,14 +1389,14 @@ glass.add(options);
 | Symptom | What to check |
 | --- | --- |
 | `WebGL2 is not available` | Check the `Result` from `createGlass()`. The browser must be able to create a WebGL2 context. |
-| An old recipe or `prominent` name fails | Select a built-in `preset`; see the migration section. Check `shape.error`. |
+| An old recipe or `prominent` name fails | Select a built-in `preset`; see the migration section. Check `shape.error`. The rejected field is left out and the other fields of the same update still apply. |
 | The glass effect is barely visible | Blur and refraction are harder to see over a solid color. Supply a backdrop with lines or varied colors, like the quick-start example. |
 | CSS backgrounds or HTML do not show through the glass | Supply an image, canvas or video of that scene as the backdrop. DOM content is not captured automatically. |
 | Glass is missing inside a container | With `fixed: false`, check the container's actual width and height. An opaque DOM background can also cover the glass. |
 | The shape is rounder than expected | The default radius is half the short side. Set `radius` explicitly. |
 | Glass is misaligned with its element | Use `follow()` or a framework adapter. For CSS movement animations, set `everyFrame: true`; React, Svelte, Vue and Solid support changing this prop after attachment. |
 | A mask does not work | Check that the mask was supplied at creation, float render targets are supported, and inspect `shape.error` or a `null` result from `group.add()`. |
-| No more members can be added | A group holds at most 16 members, including at most 4 masks. Also check whether the group was removed. |
+| No more members can be added | A group holds at most 16 members, including at most 4 masks; `group.error` says which limit was reached. Also check whether the group was removed. |
 | Small glass does not follow backdrop brightness | Check preset support, a short side up to 64, `adaptive` and environment settings. |
 | Video or canvas updates do not appear | Check `live: true`. With `Renderer`, manage uploads or dirty notifications and frame requests yourself. |
 | Removing a backdrop | `setBackdrop(null)`, `clearBackdrop()` and the component canvas's `backdrop={null}` remove uploaded pixels and retained sources. |

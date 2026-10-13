@@ -144,6 +144,32 @@ export const FUNCTIONAL = {
         s.set({ preset: "standard" }); equal(s.error, "", "built-in update accepted");
         equal(g.renderer.getPreset(s.handle), 0, "standard"); g.destroy();
     },
+    "an update with a rejected preset or mask still applies its other fields": () => {
+        const g = makeGlass(), s = g.add({ x: 40, y: 40, width: 300, height: 160, radius: 24, preset: "clear", transition: "none" });
+        const before = frameOf(g);
+        s.set({ preset: "prominent", opacity: 0.5 });
+        truthy(s.error.includes("unknown"), s.error);
+        equal(g.renderer.getPreset(s.handle), 1, "the preset stays");
+        const faded = frameOf(g);
+        truthy(distance(before, faded) > 0, "the opacity of the same update applies");
+        s.set({ opacity: 0.5, x: 40 });
+        truthy(s.error.includes("unknown"), "an update without a material keeps the report");
+        s.set({ mask: star(40), tint: [1, 0, 0, 0.5] });
+        truthy(s.error.includes("mask"), s.error);
+        truthy(distance(faded, frameOf(g)) > 0, "the tint of the same update applies");
+        s.set({ preset: "clear" });
+        equal(s.error, "", "an accepted material clears the report");
+        g.destroy();
+    },
+    "a full group reports why it takes no more members": () => {
+        const g = makeGlass(), group = g.addGroup({ spacing: 8, transition: "none" });
+        for (let i = 0; i < 16; i++) truthy(group.add({ x: 20 + i * 36, y: 40, width: 30, height: 30 }), "member " + i);
+        equal(group.error, "", "sixteen members fit");
+        equal(group.add({ x: 20, y: 100, width: 30, height: 30 }), null, "the seventeenth is refused");
+        truthy(group.error.includes("16"), group.error);
+        equal(group.size, 16, "members");
+        g.destroy();
+    },
     "built-in materials: resizing resolves the same material as a fresh shape": () => {
         const g = makeGlass(), s = g.add({ x: 40, y: 40, width: 120, height: 48, radius: 24, adaptive: false });
         s.set({ width: 300, height: 160 });

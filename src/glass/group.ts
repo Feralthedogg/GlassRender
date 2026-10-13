@@ -3,6 +3,7 @@
  * @brief Shared glass materials and independently positioned group outlines.
  */
 
+import { MAX_MEMBERS } from "../layout.js";
 import type { Renderer } from "../renderer/renderer.js";
 import type { Glass } from "./glass.js";
 import { GlassItem, paintElement } from "./item.js";
@@ -153,7 +154,10 @@ export class GlassGroup extends GlassItem {
             const made = r.addMemberMask(this.id, o.mask, m.x, m.y, m.width, m.height);
             if (!made.ok) { this.error = made.error; return null; }
         } else {
-            if (r.addMember(this.id, m.x, m.y, m.width, m.height, m.round(), kindOf(o.corner)) < 0) return null;
+            if (r.addMember(this.id, m.x, m.y, m.width, m.height, m.round(), kindOf(o.corner)) < 0) {
+                this.error = "a group holds at most " + MAX_MEMBERS + " members";
+                return null;
+            }
             this.corners(m);
         }
         this.members.push(m);

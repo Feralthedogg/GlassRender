@@ -61,11 +61,12 @@ export class GlassShape extends GlassItem {
         if (u.height !== undefined) { this.height = u.height; geo = true; }
         if (u.radius !== undefined) { this.radius = u.radius; geo = true; }
         if (u.corner !== undefined && u.corner !== this.corner) { this.corner = u.corner; this.renderer.setCorner(this.id, kindOf(u.corner)); }
+        let rejected = "";
         if (u.mask !== undefined) {
-            if (this.masked) { this.renderer.setMask(this.id, u.mask); this.error = ""; }
-            else this.error = "only a shape made with a mask can get another mask";
+            if (this.masked) this.renderer.setMask(this.id, u.mask);
+            else rejected = "only a shape made with a mask can get another mask";
         }
-        const mat = this.takeMaterial(u);
+        const mat = this.takeMaterial(u, rejected, u.mask !== undefined);
         if (geo) this.applyGeometry();
         if (mat) this.applyMaterial();
         if (u.visible !== undefined) this.setVisible(u.visible);

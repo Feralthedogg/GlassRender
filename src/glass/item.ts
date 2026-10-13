@@ -44,7 +44,11 @@ export abstract class GlassItem {
     protected removed: boolean;
     // scheme last reported: 0 dark, 1 light, -1 none yet
     protected shown: number;
-    /** @brief Why the last material or mask was rejected ("" when it was accepted). */
+    /**
+     * @brief Why the last update that named a material or a mask had one rejected ("" when it was
+     * accepted).
+     * @details A rejected field is left out; the other fields of the same update still apply.
+     */
     error: string;
 
     /** @internal */
@@ -214,12 +218,19 @@ export abstract class GlassItem {
         return this;
     }
 
-    // Apply the fields of MaterialOptions present in `u`; returns true when the material has to be applied again.
-    protected takeMaterial(u: Partial<MaterialOptions>): boolean {
+    /*
+     * Apply the fields of MaterialOptions present in `u`; returns true when the material has to be applied again.
+     * A removed option or an unknown preset is left out and reported in `error`, and the other fields still apply.
+     * `rejected` and `named` carry a mask the caller handled in the same update.
+     */
+    protected takeMaterial(u: Partial<MaterialOptions>, rejected = "", named = false): boolean {
         let mat = false;
-        if (Object.hasOwn(u, "material")) { this.error = "custom materials were removed; choose a built-in preset"; return false; }
-        if (u.preset !== undefined && presetNumber(u.preset) < 0) { this.error = "unknown material preset"; return false; }
-        if (u.preset !== undefined && u.preset !== this.preset) { this.preset = u.preset; mat = true; this.shown = -1; }
+        if (Object.hasOwn(u, "material")) { named = true; if (rejected === "") rejected = "custom materials were removed; choose a built-in preset"; }
+        if (u.preset !== undefined) {
+            named = true;
+            if (presetNumber(u.preset) < 0) { if (rejected === "") rejected = "unknown material preset"; }
+            else if (u.preset !== this.preset) { this.preset = u.preset; mat = true; this.shown = -1; }
+        }
         if (u.appearance !== undefined && u.appearance !== this.appearance) { this.appearance = u.appearance; mat = true; this.applyVeil(); }
         if (u.tint !== undefined) { this.tint = u.tint; if (!mat) this.applyTint(); }
         if (u.opacity !== undefined && u.opacity !== this.opacity) { this.opacity = u.opacity; this.renderer.setOpacity(this.id, u.opacity); }
@@ -231,12 +242,12 @@ export abstract class GlassItem {
         if (u.pressed !== undefined && u.pressed !== this.pressed) { this.pressed = u.pressed; this.applyVeil(); }
         if (u.adaptive !== undefined && u.adaptive !== this.adaptive) { this.adaptive = u.adaptive; this.renderer.setAdaptive(this.id, u.adaptive); }
         if (u.onScheme !== undefined) { this.onScheme = u.onScheme; this.shown = -1; }
+        if (named) this.error = rejected;
         return mat;
     }
 
     protected applyMaterial(): void {
         this.renderer.setPreset(this.id, presetNumber(this.preset), this.scheme());
-        this.error = "";
         this.applyTint();
     }
 
@@ -253,7 +264,6 @@ export abstract class GlassItem {
     // State after the renderer made the shape: everything that differs from its defaults.
     protected start(): void {
         const r = this.renderer;
-        const error = this.error;
         if (this.preset !== "standard") this.applyMaterial();
         else if (this.tint !== null) this.applyTint();
         if (this.opacity !== 1) r.setOpacity(this.id, this.opacity);
@@ -261,6 +271,5 @@ export abstract class GlassItem {
         if (this.pressed) this.applyVeil();
         if (!this.adaptive) r.setAdaptive(this.id, false);
         if (!this.visible) r.setPresence(this.id, 0);
-        if (error !== "") this.error = error;
     }
 }
