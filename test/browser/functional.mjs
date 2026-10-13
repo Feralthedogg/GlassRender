@@ -560,11 +560,13 @@ export const FUNCTIONAL = {
         spacer.style.height = "140px";                                     // content above grows; the box keeps its size
         await frames(3);
         equal(s.y, 140, "moved by a DOM change");
-        spacer.style.transition = "height 300ms linear"; spacer.style.height = "40px";
-        await frames(8);
+        // a slow transition, sampled by time so that slow frames (a software renderer) still land inside it
+        spacer.style.transition = "height 4000ms linear"; spacer.style.height = "40px";
+        await tick(600); await frames(2);
         truthy(s.y > 40 && s.y < 140, "follows a transition while it runs: " + s.y);
         truthy(Math.abs(s.y - top()) <= 8, "within a frame of the box: " + s.y + " / " + top());
-        await tick(400); await frames(3);
+        spacer.style.transition = "none";                                  // cancelled: the box jumps to its end
+        await frames(3);
         equal(s.y, 40, "where the transition ended");
         spacer.style.transition = ""; spacer.style.height = "auto";
         const image = new Image();

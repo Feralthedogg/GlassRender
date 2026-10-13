@@ -14,8 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -41,8 +41,8 @@ jobs:
       matrix:
         adapter: [react, svelte, vue, solid]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -53,9 +53,10 @@ jobs:
       - run: npm run build
       - run: npm ci
         working-directory: demo/${{ matrix.adapter }}
-      - run: npm run check
-        working-directory: demo/${{ matrix.adapter }}
+      # The demo sources import the adapter by its package name, which resolves to its build.
       - run: npm run ${{ matrix.adapter == 'svelte' && 'package' || 'build' }}
+        working-directory: demo/${{ matrix.adapter }}
+      - run: npm run check
         working-directory: demo/${{ matrix.adapter }}
       - run: npm run build:demo
         working-directory: demo/${{ matrix.adapter }}
@@ -65,8 +66,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
