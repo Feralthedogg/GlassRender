@@ -9,6 +9,8 @@
 Blur, refraction, rim light, shadow and color fringes over any image, canvas or video,<br>
 with React, Svelte, Vue and Solid components that keep the glass under your layout.
 
+The glass refracts a backdrop that you supply. It does not capture the page: HTML and CSS behind the canvas do not show through it.
+
 [![version](https://img.shields.io/badge/version-0.1.1_Beta-8a5cff?style=flat-square)](https://www.npmjs.com/package/glassrender/v/0.1.1-beta)
 [![WebGL2](https://img.shields.io/badge/WebGL2-renderer-3d8bff?style=flat-square)](#browser-support)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?style=flat-square)](src)
