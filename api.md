@@ -24,7 +24,7 @@ Jump to the section you need:
 
 ## Finding the right API
 
-Import `createGlass` and convenience types from `glassrender/core`, preset names and metadata from `glassrender/materials`, and renderer/numeric APIs from `glassrender/advanced`. Existing root exports remain available; the material catalog is exported by `glassrender/materials`, and `MATERIAL_LAYOUT` by `glassrender/advanced`.
+Import `createGlass` and convenience types from `glassrender/core`, preset names and metadata from `glassrender/materials`, and renderer/numeric APIs from `glassrender/advanced`. The root `glassrender` entry carries the canvas API, the catalog and the renderer with its constants in one import. Material descriptions, numeric helpers such as `presetMaterial()` and `packMaterial()`, and `MATERIAL_LAYOUT` are only in `glassrender/advanced`.
 
 | What you want to do | API | What it does |
 | --- | --- | --- |
@@ -624,6 +624,7 @@ Choose a built-in preset and keep geometry, visibility and interactions as separ
 | `Renderer.setMaterial()` / `setRecipe()` | Use `Renderer.setPreset(handle, presetNumber(name), scheme)`. |
 | `Renderer.getRecipe()` | Use `Renderer.getPreset(handle)`; inspect metadata with `getMaterialInfo(name)`. |
 | `setAccent()` / `GlassCanvas.accent` | Remove the old synthetic-preset accent option. Built-in examples use the profile unchanged. |
+| `packMaterial`, `packPreset`, `presetMaterial`, `vectorOf`, `MaterialSpec` and the other numeric helpers imported from `glassrender` | Import them from `glassrender/advanced`. The root entry no longer exports them. |
 
 ```ts
 import type { Preset } from "glassrender/materials";

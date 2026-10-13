@@ -6,7 +6,7 @@ import {
     CORNER_CIRCULAR, CORNER_SMOOTH, ENV_BUTTON_SHAPES, ENV_INACTIVE, ENV_INCREASE_CONTRAST, ENV_REDUCE_MOTION, ENV_REDUCE_TRANSPARENCY,
     DEFAULT_CHROMATIC_ABERRATION, ENV_TINTED, PRESET_CONTROL, PRESET_DOCK, PRESET_NAMES, PRESET_SLIDER, SCHEME_DARK, SCHEME_LIGHT,
     STACKING_EXACT, STACKING_FLAT, STACKING_OVERLAP, createGlass, createRenderer, presetMaterial
-} from "../../dist/index.js";
+} from "../../dist/advanced.js";
 import { LAST_ERROR } from "../../dist/renderer/shared.js";
 import { W, H, RATIO, paint, star, fail, equal, truthy, distance, makeGlass, frameOf, lowFrame, tick } from "./harness.mjs";
 

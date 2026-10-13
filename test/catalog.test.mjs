@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MATERIALS, getMaterialInfo, PRESET_COUNT, PRESET_NAMES, presetNumber } from "../dist/materials.js";
-import { packPreset, PRESET_STANDARD, PRESET_CLEAR, SCHEME_DARK, SCHEME_LIGHT, STACKING_EXACT, STACKING_FLAT, STACKING_OVERLAP } from "../dist/index.js";
+import { packPreset, PRESET_STANDARD, PRESET_CLEAR, SCHEME_DARK, SCHEME_LIGHT, STACKING_EXACT, STACKING_FLAT, STACKING_OVERLAP } from "../dist/advanced.js";
 
 test("the catalog lists every preset once, by number, with its shared profile", () => {
     assert.equal(PRESET_COUNT, 28);
@@ -40,4 +40,17 @@ test("packing a preset repeats exactly and follows its scheme and size", () => {
 
 test("stacking modes are numbered for the low-level renderer", () => {
     assert.deepEqual([STACKING_FLAT, STACKING_EXACT, STACKING_OVERLAP], [0, 1, 2]);
+});
+
+test("the root entry carries the canvas API, the catalog and the renderer; numeric helpers are in the advanced entry", async () => {
+    const root = await import("../dist/index.js"), advanced = await import("../dist/advanced.js"), core = await import("../dist/core.js");
+    for (const name of ["createGlass", "createRenderer", "Renderer", "MATERIALS", "getMaterialInfo", "presetNumber", "PRESET_CLEAR", "STACKING_OVERLAP", "ENV_TINTED"]) {
+        assert.ok(name in root, "root " + name);
+    }
+    for (const name of ["packMaterial", "packPreset", "packParams", "presetMaterial", "presetVector", "vectorOf", "VECTOR", "estimateScale", "MATERIAL_LAYOUT"]) {
+        assert.equal(name in root, false, "root without " + name);
+        assert.ok(name in advanced, "advanced " + name);
+    }
+    for (const name of Object.keys(root)) assert.ok(name in advanced, "advanced repeats root " + name);
+    assert.deepEqual(Object.keys(core).sort(), ["DEFAULT_CHROMATIC_ABERRATION", "createGlass", "resolveDisplayHeadroom"]);
 });

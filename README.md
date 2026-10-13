@@ -50,7 +50,7 @@ console.log(getMaterialInfo("player")?.canonical); // "clear"
 | `glassrender/core` | `createGlass`, shape/group options and convenience API types. |
 | `glassrender/materials` | Preset names, material catalog and snapshot inspection. |
 | `glassrender/advanced` | `createRenderer`, numeric helpers, constants and GPU block layout. |
-| `glassrender` | Existing root exports; the catalog and layout have the dedicated entries above. |
+| `glassrender` | The three above without the numeric helpers: `createGlass`, the catalog, `createRenderer` and its constants. |
 
 Older material recipes, raw `material` overrides and the synthetic `prominent` preset are no longer accepted. See the [migration notes](api.md#migrating-older-examples) before adapting an older example.
 
