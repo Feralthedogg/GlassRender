@@ -36,7 +36,7 @@ export abstract class Frame extends Tint {
         }
     }
 
-    // Layered frame start: the backdrop goes into the scene and into the copy the shapes read. Backdrop on unit 1.
+    // Frame start: the backdrop goes into the scene and into the copy the shapes read. Backdrop on unit 1.
     protected begin(): void {
         const gl = this.gl, w = this.width, h = this.height;
         if (this.sceneTex === null || this.sceneW !== w || this.sceneH !== h) this.openScene(w, h);
@@ -233,7 +233,7 @@ export abstract class Frame extends Tint {
         }
     }
 
-    // Layered frame end: the scene goes to the default framebuffer.
+    // Frame end: the scene goes to the default framebuffer.
     protected show(): void {
         const gl = this.gl;
         gl.bindVertexArray(this.vao);
@@ -398,20 +398,24 @@ export abstract class Frame extends Tint {
         if (this.animate(dt)) busy = true;
         if (this.layoutDirty) this.layout();
         if (this.maskDirty) this.bake();
-        const layered = this.layered || this.extended, all = this.backdropDirty;
-        const flip = this.extended ? 1 : layered ? 0 : this.topDown ? 1 : 0;
+        /*
+         * Shapes are always drawn into the kept scene, which is then shown. Every program so meets one render target
+         * (drawing straight into the canvas while no glass lay over glass made each program build a second pipeline
+         * when that changed, a pause of about 0.1 s per program), and a frame that changes little redraws only that.
+         */
+        const all = this.backdropDirty, flip = this.extended ? 1 : 0;
         if (this.frame[3] !== flip) { this.frame[3] = flip; this.frameDirty = true; }
         // a new frame block (light turn, row order) changes every shape
         const turned = this.frameDirty;
         if (this.frameDirty) { gl.bufferData(0x8a11, this.frame, 0x88e8); this.frameDirty = false; }
         if (all) this.stale = true;
-        if (layered && !this.stale) {
+        if (!this.stale) {
             // nothing changed: the kept scene is the frame (readings that had to wait are taken now)
             if (this.measure(1, 0, this.dstart[this.depths] as number)) busy = true;
             this.show();
             return busy;
         }
-        if (layered && !all && !turned && !this.full && this.sceneTex !== null) {
+        if (!all && !turned && !this.full && this.sceneTex !== null) {
             // some shapes changed over a kept scene: only their pixels and the shapes that read them are drawn again
             this.partial();
             if (this.measure(1, 0, this.dstart[this.depths] as number)) busy = true;
@@ -422,27 +426,25 @@ export abstract class Frame extends Tint {
         }
         gl.activeTexture(0x84c1);
         gl.bindTexture(0x0de1, this.source);
-        if (layered) this.begin();
+        this.begin();
         gl.activeTexture(0x84c0);
         const ds = this.dstart, nd = this.depths, c = this.clip;
         c[0] = 0; c[1] = 0; c[2] = this.width; c[3] = this.height;
-        const target = layered ? this.sceneFbo : null;
         // one batch per depth: shapes of a batch do not touch each other and see only the batches before them
         for (let d = 0; d < nd; d++) {
             const start = ds[d] as number, end = ds[d + 1] as number;
             this.build(all ? 1 : 0, start, end);
             this.measure(0, start, end);
             gl.bindVertexArray(this.vao);
-            gl.bindFramebuffer(0x8d40, target);
+            gl.bindFramebuffer(0x8d40, this.sceneFbo);
             gl.viewport(0, 0, this.width, this.height);
-            if (d === 0 && !layered) { gl.useProgram(this.present); gl.drawArrays(4, 0, 3); }
             if (end === start) continue;
             this.drawDepth(start, end, false);
-            if (layered && d + 1 < nd) this.keepDepth(start, end);
+            if (d + 1 < nd) this.keepDepth(start, end);
         }
         this.backdropDirty = false;
         if (this.measure(1, 0, ds[nd] as number)) busy = true;
-        if (layered) this.show();
+        this.show();
         this.settleShown();
         this.full = false;
         this.stale = false;

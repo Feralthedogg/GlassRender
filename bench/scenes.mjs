@@ -64,6 +64,7 @@ const SCENES = {
     "24 shapes in one layer (flat), nothing changes": { shapes: GRID, change: "none", flat: true },
     "24 shapes in one layer (flat), all moved every frame": { shapes: GRID, change: "move", flat: true },
     "24 shapes in one layer (flat), backdrop changes every frame": { shapes: GRID, change: "backdrop", flat: true },
+    "24 shapes in one layer (flat), one moved every frame": { shapes: GRID, change: "one", flat: true },
     "24 shapes touching by their shadows (exact), backdrop changes": { shapes: GRID, change: "backdrop" },
     "24 shapes touching by their shadows (exact), nothing changes": { shapes: GRID, change: "none" },
     "panel with a row of 10 small shapes on it, backdrop changes": { shapes: PANEL.concat(ROW), change: "backdrop" },

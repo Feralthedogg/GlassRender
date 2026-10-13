@@ -70,8 +70,8 @@ export abstract class Atlas extends Fields {
             sq[at] = slot; cu[d] = at + 1;
         }
         this.depths = top + 1;
-        const layered = top > 0;
-        if (layered !== this.layered) { this.layered = layered; this.backdropDirty = true; }
+        // A shape that starts or stops reading lower glass is rebuilt through its own region (see below).
+        this.layered = top > 0;
         const format = this.extended && this.halfFloat ? RGBA16F : RGBA8;
         for (let i = 0; i < live; i++) {
             const slot = sq[i] as number, rb = slot * R, cells = rg[rb + 13] as number;

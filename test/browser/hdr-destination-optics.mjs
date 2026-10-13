@@ -31,8 +31,7 @@ export async function hdrDestinationOptics(truthy,equal){
             state.opacity=.35;live.r.setOpacity(live.clear,state.opacity);
             const updated=read(live),fresh=scene(mode,state);
             try{const expected=read(fresh);let different=0;for(let i=0;i<updated.length;i++)different+=!Object.is(updated[i],expected[i]);equal(different,0,'HDR '+mode+' partial optical scene equals fresh');}finally{fresh.r.dispose();}
-            if(extended||mode==='exact')truthy(partialCalls>0,'optical '+mode+' uses actual partial redraw path');
-            else equal(partialCalls,0,'SDR flat retains its direct full-frame path');
+            truthy(partialCalls>0,'optical '+mode+' uses the partial redraw path');
             let changed=0;for(let i=0;i<updated.length;i++)changed+=updated[i]!==baseline[i];truthy(changed>0,'optical update changes the frame');
             state.raised=true;live.r.raise(live.rect);const raised=read(live),ordered=scene(mode,state);
             try{const expected=read(ordered);let different=0;for(let i=0;i<raised.length;i++)different+=!Object.is(raised[i],expected[i]);equal(different,0,'HDR '+mode+' raised optical scene equals fresh');}finally{ordered.r.dispose();}
