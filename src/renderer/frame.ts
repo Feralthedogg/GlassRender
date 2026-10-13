@@ -6,7 +6,7 @@
 import { edrFactor, hdrScale, hdrScaleEnabled } from "../hdr.js";
 import { BLOCK_BYTES, FEATURE_FIELD, FEATURE_TINT, ROW_GRID, UNION_BYTES } from "../layout.js";
 import { headroomShare } from "../material.js";
-import { A, ADAPT_LIVE, B, DRAW_BOTH, FLAG_READ, GEOM_BOX, GEOM_FIELD, GEOM_UNION, R, RGBA16F, RGBA8 } from "./lanes.js";
+import { A, ADAPT_LIVE, B, DRAW_BOTH, FLAG_READ, FLAG_READS, GEOM_BOX, GEOM_FIELD, GEOM_UNION, R, RGBA16F, RGBA8 } from "./lanes.js";
 import { Tint } from "./tint.js";
 
 /** @brief One frame: uploads, depth batches, the kept scene and the output range. */
@@ -145,15 +145,16 @@ export abstract class Frame extends Tint {
      */
     protected partial(): void {
         const gl = this.gl, n = this.count, o = this.order, bd = this.bounds, sh = this.shown, ch = this.changed, rf = this.rebuild;
-        const rg = this.reg, dw = this.draws;
+        const rg = this.reg, dw = this.draws, fl = this.flags;
         let dl = this.drect, nr = 0, x0 = 1e30, y0 = 1e30, x1 = -1e30, y1 = -1e30;
         for (let i = 0; i < n; i++) {
             const s = o[i] as number, b = s * B, q = s * 4, drawn = dw[s] !== 0 && rg[s * R + 14] !== 0, changed = ch[s] !== 0;
             rf[s] = 0;
             if (!drawn && !changed) continue;
             if (nr * 4 + 8 > dl.length) { const g = new Float32Array(dl.length * 2); g.set(dl); dl = g; this.drect = g; }
-            // the shapes drawn before it decide what it captures (its own change does not)
-            const reads = drawn && nr > 0 && this.reads(s, nr);
+            // the shapes drawn before it decide what it captures (its own change does not); a shape that reads no lower
+            // shape (flat stacking, or neighbours that overlap stacking leaves out) keeps its capture of the backdrop
+            const reads = drawn && nr > 0 && ((fl[s] as number) & FLAG_READS) !== 0 && this.reads(s, nr);
             if (drawn && (reads || rg[s * R + 8] !== 0)) {
                 // its pyramid is built again (also when only its atlas region moved): that capture reads the copy
                 // texture over its whole region, so the region is composed again too

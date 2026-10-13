@@ -5,7 +5,7 @@
 import {
     CORNER_CIRCULAR, CORNER_SMOOTH, ENV_BUTTON_SHAPES, ENV_INACTIVE, ENV_INCREASE_CONTRAST, ENV_REDUCE_MOTION, ENV_REDUCE_TRANSPARENCY,
     DEFAULT_CHROMATIC_ABERRATION, ENV_TINTED, PRESET_CONTROL, PRESET_DOCK, PRESET_NAMES, PRESET_SLIDER, SCHEME_DARK, SCHEME_LIGHT,
-    STACKING_EXACT, STACKING_OVERLAP, createGlass, createRenderer, presetMaterial
+    STACKING_EXACT, STACKING_FLAT, STACKING_OVERLAP, createGlass, createRenderer, presetMaterial
 } from "../../dist/index.js";
 import { LAST_ERROR } from "../../dist/renderer/shared.js";
 import { W, H, RATIO, paint, star, fail, equal, truthy, distance, makeGlass, frameOf, lowFrame, tick } from "./harness.mjs";
@@ -623,6 +623,45 @@ export const FUNCTIONAL = {
         equal(group.size, 16, "members");
         truthy(r.programs.size - before <= 4, "16 members take at most four more programs: " + (r.programs.size - before));
         glass.destroy();
+    },
+
+    "a partial redraw equals a full redraw in every stacking mode": () => {
+        for (const mode of [STACKING_EXACT, STACKING_OVERLAP, STACKING_FLAT]) {
+            const canvas = document.createElement("canvas");
+            canvas.width = W * RATIO; canvas.height = H * RATIO;
+            const gl = canvas.getContext("webgl2", { antialias: false, alpha: false }), made = createRenderer(gl);
+            truthy(made.ok, "renderer"); const r = made.value;
+            r.resize(canvas.width, canvas.height, RATIO); r.setBackdropSource(paint()); r.setStacking(mode);
+            // a panel with buttons on it, neighbours side by side, glass over glass, a group and a tinted shape
+            const frames = [[40, 40, 360, 220, 30], [70, 70, 90, 40, 20], [170, 70, 90, 40, 20], [270, 70, 90, 40, 20], [420, 60, 150, 120, 24],
+                [430, 200, 150, 120, 24], [300, 180, 200, 160, 28], [60, 290, 120, 90, 22]];
+            const shapes = frames.map((f, i) => {
+                const h = r.addShape(f[0], f[1], f[2], f[3], f[4], CORNER_SMOOTH, i % 3 ? SCHEME_DARK : SCHEME_LIGHT);
+                r.setAdaptive(h, false); if (i === 7) r.setTint(h, 0.2, 0.6, 1, 0.4); if (i === 4) r.setOpacity(h, 0.7);
+                return h;
+            });
+            const union = r.addUnion(14, SCHEME_DARK);
+            r.addMember(union, 200, 300, 70, 70, 35, CORNER_SMOOTH); r.addMember(union, 260, 310, 70, 70, 35, CORNER_SMOOTH);
+            let clock = 0;
+            const read = () => {
+                r.render(clock += 16);
+                const px = new Uint8Array(canvas.width * canvas.height * 4);
+                gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, px);
+                if (gl.getError() !== 0) fail("GL error while drawing");
+                return px;
+            };
+            r.settle(); read();
+            for (let k = 0; k < 8; k++) {
+                const i = [2, 6, 0, 4, 7, 1, 5, 3][k], f = frames[i];
+                f[0] += 9 + k * 3; f[1] += (k % 2 ? -7 : 11);
+                r.setShape(shapes[i], f[0], f[1], f[2], f[3], f[4]);
+                if (k === 3) r.setMember(union, 1, 250, 300, 70, 70, 35);
+                const partial = read();
+                r.markBackdropDirty();
+                equal(distance(partial, read()), 0, "stacking " + mode + ", move " + k);
+            }
+            r.dispose(); gl.getExtension("WEBGL_lose_context")?.loseContext();
+        }
     },
 
     "overlap stacking draws glass over glass like exact stacking and batches glass laid side by side": () => {
