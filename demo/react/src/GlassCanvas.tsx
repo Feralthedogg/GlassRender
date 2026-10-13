@@ -59,7 +59,7 @@ export interface GlassCanvasProps {
     extendedRange?: Follow;
     /**
      * @brief Brightest value of the screen relative to the standard white, used with extended range
-     * (default 2).
+     * (default 1, as in the core; browsers do not report it, so supply a measured value).
      */
     headroom?: number;
     /** @brief Preferred brightness multiplier name; overrides headroom when supplied. */
@@ -94,7 +94,7 @@ export function GlassCanvas(props: GlassCanvasProps): ReactElement {
     const {
         backdrop = null, fit = "cover", live = false, appearance = "auto", stacking = "exact", lightAngle = 0, chromaticAberration = DEFAULT_CHROMATIC_ABERRATION, maxPixelRatio = 2,
         active = true, tinted = false, reduceTransparency = "auto", increaseContrast = "auto", reduceMotion = "auto", buttonShapes = false,
-        extendedRange = false, headroom = 2, displayHeadroom, fixed = true, className, style, children
+        extendedRange = false, headroom = 1, displayHeadroom, fixed = true, className, style, children
     } = props;
     const canvas = useRef<HTMLCanvasElement | null>(null);
     const [state, setState] = useState<CanvasState>(EMPTY);
@@ -110,7 +110,7 @@ export function GlassCanvas(props: GlassCanvasProps): ReactElement {
         const p = latest.current;
         const made = createGlass(el, {
             appearance: p.appearance ?? "auto", stacking: p.stacking ?? "exact", lightAngle: p.lightAngle ?? 0, chromaticAberration: p.chromaticAberration ?? DEFAULT_CHROMATIC_ABERRATION,
-            maxPixelRatio: p.maxPixelRatio ?? 2, extendedRange: p.extendedRange ?? false, headroom: p.displayHeadroom ?? p.headroom ?? 2,
+            maxPixelRatio: p.maxPixelRatio ?? 2, extendedRange: p.extendedRange ?? false, headroom: p.displayHeadroom ?? p.headroom ?? 1,
             environment: {
                 active: p.active ?? true, tinted: p.tinted ?? false, reduceTransparency: p.reduceTransparency ?? "auto",
                 increaseContrast: p.increaseContrast ?? "auto", reduceMotion: p.reduceMotion ?? "auto", buttonShapes: p.buttonShapes ?? false

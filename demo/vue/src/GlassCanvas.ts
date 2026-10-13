@@ -68,9 +68,9 @@ export const GlassCanvas = defineComponent({
         extendedRange: { type: [Boolean, String] as PropType<Follow>, default: false },
         /**
          * @brief Brightest value of the screen relative to the standard white, used with extended
-         * range (default 2).
+         * range (default 1, as in the core; browsers do not report it, so supply a measured value).
          */
-        headroom: { type: Number, default: 2 },
+        headroom: { type: Number, default: 1 },
         /** @brief Preferred brightness multiplier name; overrides headroom when supplied. */
         displayHeadroom: { type: Number as PropType<number | undefined>, default: undefined },
         /** @brief The canvas covers the viewport (default) or only this element. */

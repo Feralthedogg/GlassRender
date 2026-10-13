@@ -64,7 +64,7 @@
         extendedRange?: Follow;
         /**
          * @brief Brightest value of the screen relative to the standard white, used with extended
-         * range (default 2).
+         * range (default 1, as in the core; browsers do not report it, so supply a measured value).
          */
         headroom?: number;
         /** @brief Preferred brightness multiplier name; overrides headroom when supplied. */
@@ -91,7 +91,7 @@
     let {
         backdrop = null, fit = "cover", live = false, appearance = "auto", stacking = "exact", lightAngle = 0, chromaticAberration = DEFAULT_CHROMATIC_ABERRATION,
         maxPixelRatio = 2, active = true, tinted = false, reduceTransparency = "auto", increaseContrast = "auto",
-        reduceMotion = "auto", buttonShapes = false, extendedRange = false, headroom = 2, displayHeadroom, fixed = true, class: className = "", onerror,
+        reduceMotion = "auto", buttonShapes = false, extendedRange = false, headroom = 1, displayHeadroom, fixed = true, class: className = "", onerror,
         oncontextlost, oncontextrestored, children
     }: Props = $props();
 

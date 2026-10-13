@@ -42,7 +42,7 @@ export function GlassCanvas(props: GlassCanvasProps): JSX.Element {
         const made = createGlass(canvas, {
             appearance: local.appearance ?? "auto", stacking: local.stacking ?? "exact", lightAngle: local.lightAngle ?? 0,
             chromaticAberration: local.chromaticAberration ?? DEFAULT_CHROMATIC_ABERRATION, maxPixelRatio: local.maxPixelRatio ?? 2,
-            extendedRange: local.extendedRange ?? false, displayHeadroom: local.displayHeadroom ?? local.headroom ?? 2,
+            extendedRange: local.extendedRange ?? false, displayHeadroom: local.displayHeadroom ?? local.headroom ?? 1,
             environment: { active: local.active ?? true, tinted: local.tinted ?? false, reduceTransparency: local.reduceTransparency ?? "auto",
                 increaseContrast: local.increaseContrast ?? "auto", reduceMotion: local.reduceMotion ?? "auto", buttonShapes: local.buttonShapes ?? false },
             onContextLost: () => local.onContextLost?.(), onContextRestored: message => local.onContextRestored?.(message)
@@ -56,7 +56,7 @@ export function GlassCanvas(props: GlassCanvasProps): JSX.Element {
     createEffect(() => { glass()?.setStacking(local.stacking ?? "exact"); });
     createEffect(() => { glass()?.setLightAngle(local.lightAngle ?? 0); });
     createEffect(() => { glass()?.setChromaticAberration(local.chromaticAberration ?? DEFAULT_CHROMATIC_ABERRATION); });
-    createEffect(() => { glass()?.setExtendedRange(local.extendedRange ?? false, local.displayHeadroom ?? local.headroom ?? 2); });
+    createEffect(() => { glass()?.setExtendedRange(local.extendedRange ?? false, local.displayHeadroom ?? local.headroom ?? 1); });
     createEffect(() => { glass()?.setEnvironment({ active: local.active ?? true, tinted: local.tinted ?? false,
         reduceTransparency: local.reduceTransparency ?? "auto", increaseContrast: local.increaseContrast ?? "auto",
         reduceMotion: local.reduceMotion ?? "auto", buttonShapes: local.buttonShapes ?? false }); });

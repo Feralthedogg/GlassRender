@@ -910,7 +910,7 @@ function Panel() {
 | `reduceTransparency`, `increaseContrast`, `reduceMotion` | Each `"auto"` | Follows accessibility settings or explicitly enables or disables them. |
 | `buttonShapes` | `false` | Draws rim lights as a plain outline. |
 | `extendedRange` | `false` | Requests extended range; also accepts `"auto"`. |
-| `headroom` | `2` | Legacy display brightness multiplier. |
+| `headroom` | `1` | Compatibility name for the display brightness multiplier, with the core's default. |
 | `displayHeadroom` | Omitted | Preferred display multiplier name; takes precedence over `headroom`. |
 | `fixed` | `true` | The canvas covers the viewport; `false` makes it cover the component's area. |
 | Content and styling | Framework syntax | React uses `children`, `className`, `style`; Svelte uses `children`, `class`; Vue uses its default slot and `class`, `style` attributes; Solid uses `children`, `class`, `style` and `ref`. |
