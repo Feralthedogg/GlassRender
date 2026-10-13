@@ -543,7 +543,7 @@ window.addEventListener("pagehide", () => {
 }, { once: true });
 ```
 
-Connect an animated 2D canvas in the same way: `glass.setBackdrop(animatedCanvas, "cover", true)`. `live` repeatedly uploads the source; your app still handles video playback or the canvas animation. A video is uploaded when it shows a new picture, so a paused video, or one slower than the display, costs no frames in between; where the browser has no video frame callbacks, and for a canvas, the source is uploaded on every frame. After manually editing a static canvas, call `setBackdrop()` again to upload its new contents.
+Connect an animated 2D canvas in the same way: `glass.setBackdrop(animatedCanvas, "cover", true)`. `live` repeatedly uploads the source; your app still handles video playback or the canvas animation. A video is uploaded when it shows a new picture, so a paused video, or one slower than the display, costs no frames in between. A video whose pictures the browser does not report in time (one that runs near the display rate, or a browser without video frame callbacks) is uploaded on every frame while it plays, and so is a canvas. After manually editing a static canvas, call `setBackdrop()` again to upload its new contents.
 
 ### Raw HDR pixels
 

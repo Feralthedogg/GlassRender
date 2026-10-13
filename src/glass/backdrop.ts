@@ -9,6 +9,8 @@ import type { Fit } from "./types.js";
 const SW = 0, SH = 1;
 // A video whose pictures come faster than its callbacks report them is uploaded on every frame for this long.
 const CHASE = 1000;
+// A playing video that has reported no picture for this long is taken to report none.
+const QUIET = 300;
 
 function sizeOf(s: TexImageSource, out: Float64Array): void {
     out[SW] = "videoWidth" in s ? s.videoWidth : "naturalWidth" in s ? s.naturalWidth : "displayWidth" in s ? s.displayWidth : s.width;
@@ -24,6 +26,7 @@ export class Backdrop {
     private readonly onChange: () => void;
     private readonly onPicture: (now: number, picture: VideoFrameCallbackMetadata) => void;
     private readonly onSeek: () => void;
+    private readonly onProgress: () => void;
     private readonly size: Float64Array;
     private source: TexImageSource | null;
     private fit: Fit;
@@ -35,6 +38,8 @@ export class Backdrop {
     private after: boolean;
     private skipped: boolean;
     private chase: number;
+    private quiet: number;
+    private decoded: number;
     /** @brief Upload again as the source changes. */
     live: boolean;
     /** @brief The frame after the last one asked about is wanted too. */
@@ -49,6 +54,7 @@ export class Backdrop {
         this.onChange = onChange;
         this.onPicture = (_now: number, picture: VideoFrameCallbackMetadata): void => { this.picture(picture.presentedFrames); };
         this.onSeek = (): void => { this.picture(0); };
+        this.onProgress = (): void => { this.progress(); };
         this.size = new Float64Array(2);
         this.source = null;
         this.fit = fit;
@@ -60,6 +66,8 @@ export class Backdrop {
         this.after = false;
         this.skipped = false;
         this.chase = 0;
+        this.quiet = 0;
+        this.decoded = 0;
         this.live = live;
         this.again = false;
     }
@@ -79,6 +87,7 @@ export class Backdrop {
             this.pictureId = source.requestVideoFrameCallback(this.onPicture);
             source.addEventListener("loadeddata", this.onSeek);
             source.addEventListener("seeked", this.onSeek);
+            source.addEventListener("timeupdate", this.onProgress);
         }
         if (source !== null && "complete" in source && !source.complete) { source.addEventListener("load", this.onLoad); return false; }
         return true;
@@ -88,9 +97,9 @@ export class Backdrop {
      * @brief Whether the live source is uploaded at the frame of time `now` (ms); sets `again`.
      * @details A canvas cannot tell when it changes and is uploaded on every frame. A video is
      * uploaded when it has shown a new picture, and the frame after that one is looked at as well:
-     * pictures on two frames in a row, or pictures that no callback reported, mean that pictures
-     * come faster than the callbacks report them, and the video is then uploaded on every frame
-     * while it plays.
+     * pictures on two frames in a row, pictures that no callback reported, or a video that decodes
+     * pictures without reporting any, mean that the callbacks do not keep up with the pictures,
+     * and the video is then uploaded on every frame while it plays.
      */
     frame(now: number): boolean {
         if (!this.live) { this.again = false; return false; }
@@ -151,6 +160,7 @@ export class Backdrop {
         v.cancelVideoFrameCallback(this.pictureId);
         v.removeEventListener("loadeddata", this.onSeek);
         v.removeEventListener("seeked", this.onSeek);
+        v.removeEventListener("timeupdate", this.onProgress);
         this.video = null;
         this.pictureId = 0;
         this.presented = 0;
@@ -158,6 +168,8 @@ export class Backdrop {
         this.after = false;
         this.skipped = false;
         this.chase = 0;
+        this.quiet = 0;
+        this.decoded = 0;
     }
 
     // The video shows a new picture, its `count`th (0 when unknown): upload it at the next frame and wait for the one after it.
@@ -169,7 +181,24 @@ export class Backdrop {
         if (count > 0) {
             if (this.presented > 0 && count - this.presented > 1) this.skipped = true;
             this.presented = count;
+            this.quiet = 0;
         }
+        this.due = true;
+        this.onChange();
+    }
+
+    // The video plays on. Where it decodes pictures that are not reported (a browser that keeps the callbacks of a
+    // video it does not show), it is uploaded on every frame like a canvas.
+    private progress(): void {
+        const v = this.video;
+        if (v === null) return;
+        const n = v.getVideoPlaybackQuality().totalVideoFrames, t = performance.now();
+        // Nothing new was decoded (a stream that stands still): there is nothing to report.
+        if (n === this.decoded) { this.quiet = 0; return; }
+        this.decoded = n;
+        if (this.quiet === 0) { this.quiet = t; return; }
+        if (t - this.quiet < QUIET) return;
+        this.skipped = true;
         this.due = true;
         this.onChange();
     }

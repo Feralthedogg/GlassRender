@@ -645,6 +645,15 @@ export const FUNCTIONAL = {
         truthy(uploads >= 8, "after pictures on frames in a row every frame uploads: " + uploads);
         await tick(1300); await frames(3); uploads = 0; await frames(10);
         equal(uploads, 0, "and stops when the pictures stop");
+        // A video that plays on without reporting its pictures is uploaded on every frame as well.
+        // It is told from a video that stands still by its count of decoded pictures, which some browsers do not keep for a stream.
+        const counted = video.getVideoPlaybackQuality().totalVideoFrames;
+        video.requestVideoFrameCallback = () => 0; video.cancelVideoFrameCallback = () => {};
+        glass.setBackdrop(video, "stretch", true);
+        for (let i = 0; i < 90; i++) { fill(i & 1 ? "#c0c000" : "#0000c0"); send(); await frames(1); if (i === 79) uploads = 0; }
+        delete video.requestVideoFrameCallback; delete video.cancelVideoFrameCallback;
+        if (video.getVideoPlaybackQuality().totalVideoFrames > counted) truthy(uploads >= 8, "a video that reports no pictures uploads on every frame: " + uploads);
+        glass.setBackdrop(paint()); await frames(3);
         // A canvas cannot tell when it changes.
         glass.setBackdrop(source, "stretch", true);
         await frames(2); uploads = 0; await frames(10);
