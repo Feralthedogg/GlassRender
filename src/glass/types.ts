@@ -201,7 +201,8 @@ export interface GlassOptions {
     /** @brief How a backdrop of another size is laid on the canvas (default "cover"). */
     readonly fit?: Fit;
     /**
-     * @brief Upload the backdrop again on every frame (a playing video, an animated canvas).
+     * @brief Upload the backdrop again as it changes: a video when it shows a new picture, an
+     * animated canvas on every frame.
      */
     readonly live?: boolean;
     /** @brief Window activity, the tinted setting and the accessibility settings. */

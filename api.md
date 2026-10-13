@@ -153,7 +153,7 @@ The convenience API's `shape.set()` returns the shape so you can chain calls. Re
 | --- | --- | --- | --- |
 | `backdrop` | `TexImageSource` | Omitted | The image, canvas, video or other source the glass reads. The core API takes an object rather than a URL string. |
 | `fit` | `"cover"`, `"contain"`, `"stretch"` | `"cover"` | How the backdrop fits the canvas. |
-| `live` | `boolean` | `false` | Uploads the backdrop again on every frame. |
+| `live` | `boolean` | `false` | Uploads the backdrop again as it changes: a video when it shows a new picture, a canvas on every frame. |
 | `appearance` | `"auto"`, `"light"`, `"dark"` | `"auto"` | Default appearance for the shapes. `auto` follows the page's preferred color scheme. |
 | `autoResize` | `boolean` | `true` | Matches the drawing buffer to the displayed canvas size and device pixel ratio. |
 | `maxPixelRatio` | Positive number | `2` | Maximum drawing-buffer pixels per CSS pixel. Set it at creation; there is no setter. |
@@ -543,7 +543,7 @@ window.addEventListener("pagehide", () => {
 }, { once: true });
 ```
 
-Connect an animated 2D canvas in the same way: `glass.setBackdrop(animatedCanvas, "cover", true)`. `live` repeatedly uploads the source; your app still handles video playback or the canvas animation. After manually editing a static canvas, call `setBackdrop()` again to upload its new contents.
+Connect an animated 2D canvas in the same way: `glass.setBackdrop(animatedCanvas, "cover", true)`. `live` repeatedly uploads the source; your app still handles video playback or the canvas animation. A video is uploaded when it shows a new picture, so a paused video, or one slower than the display, costs no frames in between; where the browser has no video frame callbacks, and for a canvas, the source is uploaded on every frame. After manually editing a static canvas, call `setBackdrop()` again to upload its new contents.
 
 ### Raw HDR pixels
 
@@ -900,7 +900,7 @@ function Panel() {
 | --- | --- | --- |
 | `backdrop` | `null` | An image URL string or a `TexImageSource` object. |
 | `fit` | `"cover"` | `cover`, `contain` or `stretch`. |
-| `live` | `false` | Uploads a video or canvas object on every frame. URL strings are loaded as static images. |
+| `live` | `false` | Uploads a video object when it shows a new picture and a canvas object on every frame. URL strings are loaded as static images. |
 | `appearance` | `"auto"` | Default appearance. |
 | `stacking` | `"overlap"` | How overlapping glass is drawn: `"overlap"`, `"exact"` or `"flat"`. |
 | `lightAngle` | `0` | Rim-light rotation in radians. |

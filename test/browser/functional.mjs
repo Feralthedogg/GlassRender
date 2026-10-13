@@ -606,6 +606,58 @@ export const FUNCTIONAL = {
         r.render = render; glass.destroy(); glass.canvas.remove(); box.remove();
     },
 
+    "a live video backdrop is uploaded when it shows a new picture, a live canvas on every frame": async () => {
+        // A video of a canvas that sends a picture only when asked to.
+        const source = document.createElement("canvas");
+        source.width = W * RATIO; source.height = H * RATIO;
+        const context = source.getContext("2d"), fill = (color) => { context.fillStyle = color; context.fillRect(0, 0, source.width, source.height); };
+        if (typeof source.captureStream !== "function" || !("requestVideoFrameCallback" in HTMLVideoElement.prototype)) return "skipped: no canvas stream or video frame callbacks";
+        fill("#c00000");
+        const stream = source.captureStream(0), track = stream.getVideoTracks()[0];
+        // The request is made on the track, or on the stream in browsers that keep it there.
+        const send = () => { if (typeof track.requestFrame === "function") track.requestFrame(); else stream.requestFrame(); };
+        const video = document.createElement("video");
+        video.muted = true; video.playsInline = true; video.srcObject = stream;
+        const shown = () => Promise.race([new Promise((done) => video.requestVideoFrameCallback(() => done(true))), tick(3000).then(() => false)]);
+        const first = shown();
+        video.play().catch(() => {});
+        send();
+        if (!await first) { track.stop(); return "skipped: the video shows no pictures here"; }
+        const glass = makeGlass(), r = glass.renderer, put = r.setBackdropSource.bind(r), render = r.render.bind(r);
+        let uploads = 0, drawn = 0;
+        r.setBackdropSource = (s) => { uploads++; put(s); };
+        r.render = (now) => { drawn++; return render(now); };
+        glass.setBackdrop(video, "stretch", true);
+        equal(uploads, 1, "the picture it shows is uploaded at once");
+        await frames(5); uploads = 0; drawn = 0; await frames(20);
+        equal(uploads, 0, "a video that shows nothing new is not uploaded again");
+        equal(drawn, 0, "and no frame is drawn for it");
+        const next = shown();
+        fill("#00c000"); send();
+        truthy(await next, "the video shows the new picture");
+        await frames(3);
+        truthy(uploads > 0, "a new picture is uploaded");
+        const px = frameOf(glass), at = ((glass.canvas.height >> 1) * glass.canvas.width + (glass.canvas.width >> 1)) * 4;
+        truthy(px[at + 1] > 150 && px[at] < 60, "and drawn: " + px[at] + ", " + px[at + 1] + ", " + px[at + 2]);
+        // Pictures on every frame come faster than they are reported: the video is then uploaded on every frame while it plays.
+        for (let i = 0; i < 30; i++) { fill(i & 1 ? "#00c0c0" : "#c000c0"); send(); await frames(1); }
+        await frames(3); uploads = 0; await frames(10);
+        truthy(uploads >= 8, "after pictures on frames in a row every frame uploads: " + uploads);
+        await tick(1300); await frames(3); uploads = 0; await frames(10);
+        equal(uploads, 0, "and stops when the pictures stop");
+        // A canvas cannot tell when it changes.
+        glass.setBackdrop(source, "stretch", true);
+        await frames(2); uploads = 0; await frames(10);
+        truthy(uploads >= 8, "a live canvas is uploaded on every frame: " + uploads);
+        glass.setBackdrop(video, "stretch", true); glass.setBackdrop(paint());
+        await frames(3); uploads = 0;
+        const last = shown();
+        fill("#0000c0"); send();
+        await last; await frames(3);
+        equal(uploads, 0, "a replaced video is no longer followed");
+        r.setBackdropSource = put; r.render = render; glass.destroy(); track.stop();
+    },
+
     "pressing, opacity and group members up to the next size reuse compiled programs": () => {
         const glass = makeGlass(), r = glass.renderer;
         const panel = glass.add({ x: 40, y: 40, width: 300, height: 160, radius: 24, transition: "none" });

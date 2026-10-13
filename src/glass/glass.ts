@@ -88,7 +88,7 @@ export class Glass {
         this.items = [];
         this.leaving = [];
         this.followers = new Followers((): void => { this.measure = true; this.update(); });
-        this.backdrop = new Backdrop((): void => { this.upload(); this.update(); }, o.fit ?? "cover", o.live ?? false);
+        this.backdrop = new Backdrop((): void => { this.upload(); this.update(); }, (): void => { this.update(); }, o.fit ?? "cover", o.live ?? false);
         this.surroundings = new Surroundings((): void => { this.surroundingsChanged(); });
         this.onFrame = (now: number): void => { this.tick(now, false); };
         this.onWarm = (): void => { this.warm(); };
@@ -195,7 +195,8 @@ export class Glass {
      * @brief Set the picture behind the glass.
      * @details It is laid on the canvas by `fit` and laid again when the canvas is resized. null
      * removes uploaded pixels and the retained source, including live and raw backdrops.
-     * @param live Upload it again on every frame (a playing video, an animated canvas).
+     * @param live Upload it again as it changes: a video when it shows a new picture, an animated
+     * canvas on every frame.
      */
     setBackdrop(source: TexImageSource | null, fit: Fit = "cover", live = false): void {
         if (source === null) { this.clearBackdrop(); return; }
@@ -397,10 +398,10 @@ export class Glass {
     private tick(now: number, force: boolean): void {
         this.frameId = 0;
         if (this.destroyed || this.lost) return;
-        const fs = this.followers, live = this.backdrop.live, r = this.renderer;
+        const fs = this.followers, bd = this.backdrop, r = this.renderer;
         if ((this.measure || fs.everyFrame) && fs.size > 0) { this.measure = false; fs.measure(this.canvas); }
         if (this.reorder) this.order();
-        if (live) this.upload();
+        if (bd.frame(now)) this.upload();
         let more = false;
         // Without a change since the last frame the canvas keeps showing it.
         if (force || this.busy || r.needsRender()) {
@@ -423,7 +424,7 @@ export class Glass {
         // The scheme each glass shows; small adaptive glass changes it with the backdrop.
         const its = this.items;
         for (let i = 0; i < its.length; i++) (its[i] as GlassItem).sync();
-        if (more || live || fs.everyFrame) this.update();
+        if (more || bd.again || fs.everyFrame) this.update();
         else if (this.warmId === 0 && r.needsWarm()) this.warmId = setTimeout(this.onWarm, WARM_DELAY);
     }
 
