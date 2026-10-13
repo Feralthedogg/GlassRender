@@ -85,7 +85,7 @@ function notify(): void {
     if (toast.value === "") toast.value = "enter";
 }
 
-// a widget moves by a CSS translation; its glass measures the box on every frame (`everyFrame`), so it keeps up
+// a widget moves by a CSS translation; the glass follows the style change on the same frame
 function grab(key: Widget, e: PointerEvent): void {
     drag(e, offsets.value[key], (to) => { offsets.value[key] = to; });
 }
@@ -106,14 +106,14 @@ const shift = (p: Point): { translate: string } => ({ translate: `${p.x}px ${p.y
             <!-- one piece of glass for three boxes: neighbours closer than `spacing` flow into each other -->
             <GlassGroup :spacing="24" :preset="preset">
                 <nav class="toolbar draggable" aria-label="Material" :style="shift(offsets.toolbar)" @pointerdown="grab('toolbar', $event)">
-                    <Glass class="tool" every-frame><button aria-label="Previous material" @click="step(-1)"><Icon name="left" /></button></Glass>
-                    <Glass class="tool wide" every-frame><button @click="step(1)"><Icon name="layers" />{{ preset }}</button></Glass>
-                    <Glass class="tool" every-frame><button aria-label="Next material" @click="step(1)"><Icon name="right" /></button></Glass>
+                    <Glass class="tool"><button aria-label="Previous material" @click="step(-1)"><Icon name="left" /></button></Glass>
+                    <Glass class="tool wide"><button @click="step(1)"><Icon name="layers" />{{ preset }}</button></Glass>
+                    <Glass class="tool"><button aria-label="Next material" @click="step(1)"><Icon name="right" /></button></Glass>
                 </nav>
             </GlassGroup>
 
             <div class="scene">
-                <Glass class="hero draggable" :radius="30" :preset="preset" :visible="cardShown" every-frame
+                <Glass class="hero draggable" :radius="30" :preset="preset" :visible="cardShown"
                     :style="shift(offsets.hero)" @pointerdown="grab('hero', $event)">
                     <div class="fade" :class="{ gone: !cardShown }">
                         <span class="eyebrow">Vue components</span>
@@ -123,17 +123,17 @@ const shift = (p: Point): { translate: string } => ({ translate: `${p.x}px ${p.y
                             shared WebGL2 canvas and keeps it there as the page lays out, scrolls and resizes. Drag a card to move it.
                         </p>
                         <div class="actions">
-                            <Glass class="cta" interactive preset="standard" :radius="24" :visible="cardShown" every-frame>
+                            <Glass class="cta" interactive preset="standard" :radius="24" :visible="cardShown">
                                 <button type="button" @click="notify"><Icon name="bell" />Show a notification</button>
                             </Glass>
-                            <Glass class="cta" interactive :preset="preset" :radius="24" :visible="cardShown" every-frame>
+                            <Glass class="cta" interactive :preset="preset" :radius="24" :visible="cardShown">
                                 <a :href="GUIDE" target="_blank" rel="noreferrer"><Icon name="book" />API guide</a>
                             </Glass>
                         </div>
                     </div>
                 </Glass>
 
-                <Glass class="player draggable" :radius="26" :preset="preset" every-frame
+                <Glass class="player draggable" :radius="26" :preset="preset"
                     :style="shift(offsets.player)" @pointerdown="grab('player', $event)">
                     <div class="player-top">
                         <div class="art"><Icon name="music" /></div>
@@ -152,13 +152,13 @@ const shift = (p: Point): { translate: string } => ({ translate: `${p.x}px ${p.y
             </div>
         </main>
 
-        <Glass class="lens-demo" preset="control" every-frame :style="{ left: lens.x + 'px', top: lens.y + 'px' }"
+        <Glass class="lens-demo" preset="control" :style="{ left: lens.x + 'px', top: lens.y + 'px' }"
             aria-label="Color separation lens" @pointerdown="drag($event, lens, (to) => { lens.x = to.x; lens.y = to.y; })">
             <span class="lens-label">Color lens · control<small>Drag across sharp edges</small></span>
         </Glass>
 
         <!-- small glass takes the scheme of what is behind it: drag it over light and dark parts of the wallpaper -->
-        <Glass class="puck" every-frame :style="{ left: puck.x + 'px', top: puck.y + 'px' }" @scheme="puckScheme = $event"
+        <Glass class="puck" :style="{ left: puck.x + 'px', top: puck.y + 'px' }" @scheme="puckScheme = $event"
             @pointerdown="grabPuck">
             <span>{{ puckScheme }}</span>
         </Glass>

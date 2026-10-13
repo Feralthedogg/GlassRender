@@ -77,7 +77,7 @@
         if (toast === "leave") { const t = setTimeout(() => (toast = ""), 450); return () => clearTimeout(t); }
     });
 
-    // a widget moves by a CSS translation; its glass measures the box on every frame (`everyFrame`), so it keeps up
+    // a widget moves by a CSS translation; the glass follows the style change on the same frame
     function grab(key: Widget): (e: PointerEvent) => void {
         return (e) => drag(e, offsets[key], (to) => (offsets[key] = to));
     }
@@ -94,14 +94,14 @@
         <!-- one piece of glass for three boxes: neighbours closer than `spacing` flow into each other -->
         <GlassGroup spacing={24} {preset}>
             <nav class="toolbar draggable" aria-label="Material" style={shift(offsets.toolbar)} onpointerdown={grab("toolbar")}>
-                <Glass class="tool" everyFrame><button aria-label="Previous material" onclick={() => step(-1)}><Icon name="left" /></button></Glass>
-                <Glass class="tool wide" everyFrame><button onclick={() => step(1)}><Icon name="layers" />{preset}</button></Glass>
-                <Glass class="tool" everyFrame><button aria-label="Next material" onclick={() => step(1)}><Icon name="right" /></button></Glass>
+                <Glass class="tool"><button aria-label="Previous material" onclick={() => step(-1)}><Icon name="left" /></button></Glass>
+                <Glass class="tool wide"><button onclick={() => step(1)}><Icon name="layers" />{preset}</button></Glass>
+                <Glass class="tool"><button aria-label="Next material" onclick={() => step(1)}><Icon name="right" /></button></Glass>
             </nav>
         </GlassGroup>
 
         <div class="scene">
-            <Glass class="hero draggable" radius={30} {preset} visible={cardShown} everyFrame
+            <Glass class="hero draggable" radius={30} {preset} visible={cardShown}
                 style={shift(offsets.hero)} onpointerdown={grab("hero")}>
                 <div class="fade" class:gone={!cardShown}>
                     <span class="eyebrow">Svelte components</span>
@@ -111,17 +111,17 @@
                         WebGL2 canvas and keeps it there as the page lays out, scrolls and resizes. Drag a card to move it.
                     </p>
                     <div class="actions">
-                        <Glass class="cta" interactive preset="standard" radius={24} visible={cardShown} everyFrame>
+                        <Glass class="cta" interactive preset="standard" radius={24} visible={cardShown}>
                             <button type="button" onclick={() => { if (toast === "") toast = "enter"; }}><Icon name="bell" />Show a notification</button>
                         </Glass>
-                        <Glass class="cta" interactive {preset} radius={24} visible={cardShown} everyFrame>
+                        <Glass class="cta" interactive {preset} radius={24} visible={cardShown}>
                             <a href={GUIDE} target="_blank" rel="noreferrer"><Icon name="book" />API guide</a>
                         </Glass>
                     </div>
                 </div>
             </Glass>
 
-            <Glass class="player draggable" radius={26} {preset} everyFrame
+            <Glass class="player draggable" radius={26} {preset}
                 style={shift(offsets.player)} onpointerdown={grab("player")}>
                 <div class="player-top">
                     <div class="art"><Icon name="music" /></div>
@@ -140,13 +140,13 @@
         </div>
     </main>
 
-    <Glass class="lens-demo" preset="control" everyFrame style="left: {lens.x}px; top: {lens.y}px"
+    <Glass class="lens-demo" preset="control" style="left: {lens.x}px; top: {lens.y}px"
         aria-label="Color separation lens" onpointerdown={(e) => drag(e, lens, (to) => (lens = to))}>
         <span class="lens-label">Color lens · control<small>Drag across sharp edges</small></span>
     </Glass>
 
     <!-- small glass takes the scheme of what is behind it: drag it over light and dark parts of the wallpaper -->
-    <Glass class="puck" everyFrame style="left: {puck.x}px; top: {puck.y}px" onscheme={(v) => (puckScheme = v)}
+    <Glass class="puck" style="left: {puck.x}px; top: {puck.y}px" onscheme={(v) => (puckScheme = v)}
         onpointerdown={(e) => drag(e, puck, (to) => (puck = to))}>
         <span>{puckScheme}</span>
     </Glass>

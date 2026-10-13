@@ -85,7 +85,7 @@ export function App(): ReactElement {
         if (toast === "leave") { const t = setTimeout(() => setToast(""), 450); return () => clearTimeout(t); }
     }, [toast]);
 
-    // a widget moves by a CSS translation; its glass measures the box on every frame (`everyFrame`), so it keeps up
+    // a widget moves by a CSS translation; the glass follows the style change on the same frame
     const grab = (key: Widget) => (e: PointerEvent<HTMLElement>): void => drag(e, offsets[key], (to) => setOffsets((o) => ({ ...o, [key]: to })));
     const moved = Object.values(offsets).some((p) => p.x !== 0 || p.y !== 0);
 
@@ -97,14 +97,14 @@ export function App(): ReactElement {
                 {/* one piece of glass for three boxes: neighbours closer than `spacing` flow into each other */}
                 <GlassGroup spacing={24} preset={preset}>
                     <nav className="toolbar draggable" aria-label="Material" style={shift(offsets.toolbar)} onPointerDown={grab("toolbar")}>
-                        <Glass className="tool" everyFrame><button aria-label="Previous material" onClick={() => step(-1)}><Icon name="left" /></button></Glass>
-                        <Glass className="tool wide" everyFrame><button onClick={() => step(1)}><Icon name="layers" />{preset}</button></Glass>
-                        <Glass className="tool" everyFrame><button aria-label="Next material" onClick={() => step(1)}><Icon name="right" /></button></Glass>
+                        <Glass className="tool"><button aria-label="Previous material" onClick={() => step(-1)}><Icon name="left" /></button></Glass>
+                        <Glass className="tool wide"><button onClick={() => step(1)}><Icon name="layers" />{preset}</button></Glass>
+                        <Glass className="tool"><button aria-label="Next material" onClick={() => step(1)}><Icon name="right" /></button></Glass>
                     </nav>
                 </GlassGroup>
 
                 <div className="scene">
-                    <Glass className="hero draggable" radius={30} preset={preset} visible={cardShown} everyFrame
+                    <Glass className="hero draggable" radius={30} preset={preset} visible={cardShown}
                         style={shift(offsets.hero)} onPointerDown={grab("hero")}>
                         <div className={cardShown ? "fade" : "fade gone"}>
                             <span className="eyebrow">React components</span>
@@ -114,17 +114,17 @@ export function App(): ReactElement {
                                 shared WebGL2 canvas and keeps it there as the page lays out, scrolls and resizes. Drag a card to move it.
                             </p>
                             <div className="actions">
-                                <Glass className="cta" interactive preset="standard" radius={24} visible={cardShown} everyFrame>
+                                <Glass className="cta" interactive preset="standard" radius={24} visible={cardShown}>
                                     <button type="button" onClick={() => setToast(toast === "" ? "enter" : toast)}><Icon name="bell" />Show a notification</button>
                                 </Glass>
-                                <Glass className="cta" interactive preset={preset} radius={24} visible={cardShown} everyFrame>
+                                <Glass className="cta" interactive preset={preset} radius={24} visible={cardShown}>
                                     <a href={GUIDE} target="_blank" rel="noreferrer"><Icon name="book" />API guide</a>
                                 </Glass>
                             </div>
                         </div>
                     </Glass>
 
-                    <Glass className="player draggable" radius={26} preset={preset} everyFrame
+                    <Glass className="player draggable" radius={26} preset={preset}
                         style={shift(offsets.player)} onPointerDown={grab("player")}>
                         <div className="player-top">
                             <div className="art"><Icon name="music" /></div>
@@ -143,13 +143,13 @@ export function App(): ReactElement {
                 </div>
             </main>
 
-            <Glass className="lens-demo" preset="control" everyFrame style={{ left: lens.x, top: lens.y }}
+            <Glass className="lens-demo" preset="control" style={{ left: lens.x, top: lens.y }}
                 aria-label="Color separation lens" onPointerDown={(e) => drag(e, lens, setLens)}>
                 <span className="lens-label">Color lens · control<small>Drag across sharp edges</small></span>
             </Glass>
 
             {/* small glass takes the scheme of what is behind it: drag it over light and dark parts of the wallpaper */}
-            <Glass className="puck" everyFrame style={{ left: puck.x, top: puck.y }} onScheme={setPuckScheme}
+            <Glass className="puck" style={{ left: puck.x, top: puck.y }} onScheme={setPuckScheme}
                 onPointerDown={(e) => drag(e, puck, setPuck)}>
                 <span>{puckScheme}</span>
             </Glass>

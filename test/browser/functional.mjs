@@ -572,6 +572,15 @@ export const FUNCTIONAL = {
         spacer.append(image); await image.decode(); await frames(3);
         equal(s.y, top(), "moved by an image load");
         truthy(s.y >= 80, "below the image");
+        // a drag: the style changes in a task, and the frame that paints it has the glass in place without everyFrame
+        const left = () => box.getBoundingClientRect().left - canvas.getBoundingClientRect().left;
+        for (let i = 1; i <= 8; i++) {
+            box.style.translate = i * 7 + "px " + i * 3 + "px";
+            await tick(); await frames(1);
+            equal(s.x, left(), "dragged, frame " + i);
+            equal(s.y, top(), "dragged down, frame " + i);
+        }
+        truthy(s.x >= 30 + 56, "the drag moved the glass");
         glass.destroy(); canvas.remove(); wrap.remove();
     },
 
