@@ -36,8 +36,9 @@ export interface BackdropPixels {
 /**
  * @brief How shapes over other shapes are drawn: every shape sees the backdrop only, the glass below
  * it as well, or only the glass and shadows its body covers.
- * @details `STACKING_OVERLAP` skips lower glass that its blur or refraction reaches without the
- * shape lying over it, which removes most of the capture passes of glass laid side by side.
+ * @details `STACKING_OVERLAP`, the default, skips lower glass that its blur or refraction reaches
+ * without the shape lying over it, which removes most of the capture passes of glass laid side by
+ * side. `STACKING_EXACT` includes that glass too.
  */
 export const STACKING_FLAT = 0;
 export const STACKING_EXACT = 1;

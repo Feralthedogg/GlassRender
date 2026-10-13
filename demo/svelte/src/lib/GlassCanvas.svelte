@@ -21,7 +21,7 @@
          * @brief Default surroundings of the glass (default "auto": the page's color scheme).
          */
         appearance?: Appearance;
-        /** @brief Glass over glass: "exact" (default), "overlap" (glass sees only the glass it lies over) or "flat". */
+        /** @brief Glass over glass: "overlap" (default: glass sees the glass it lies over), "exact" or "flat". */
         stacking?: StackingMode;
         /** @brief Turn of the rim lights in radians, clockwise. */
         lightAngle?: number;
@@ -89,7 +89,7 @@
     }
 
     let {
-        backdrop = null, fit = "cover", live = false, appearance = "auto", stacking = "exact", lightAngle = 0, chromaticAberration = DEFAULT_CHROMATIC_ABERRATION,
+        backdrop = null, fit = "cover", live = false, appearance = "auto", stacking = "overlap", lightAngle = 0, chromaticAberration = DEFAULT_CHROMATIC_ABERRATION,
         maxPixelRatio = 2, active = true, tinted = false, reduceTransparency = "auto", increaseContrast = "auto",
         reduceMotion = "auto", buttonShapes = false, extendedRange = false, headroom = 1, displayHeadroom, fixed = true, class: className = "", onerror,
         oncontextlost, oncontextrestored, children

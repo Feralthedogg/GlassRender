@@ -18,7 +18,7 @@ export interface GlassCanvasProps {
     live?: boolean;
     /** @brief Default surroundings of the glass (default "auto": the page's color scheme). */
     appearance?: Appearance;
-    /** @brief Glass over glass: "exact" (default), "overlap" (glass sees only the glass it lies over) or "flat". */
+    /** @brief Glass over glass: "overlap" (default: glass sees the glass it lies over), "exact" or "flat". */
     stacking?: StackingMode;
     /** @brief Turn of the rim lights in radians, clockwise. */
     lightAngle?: number;
@@ -92,7 +92,7 @@ const FIXED: CSSProperties = { ...COVER, position: "fixed", width: "100vw", heig
 /** @brief Own the canvas and renderer shared by descendant glass components. */
 export function GlassCanvas(props: GlassCanvasProps): ReactElement {
     const {
-        backdrop = null, fit = "cover", live = false, appearance = "auto", stacking = "exact", lightAngle = 0, chromaticAberration = DEFAULT_CHROMATIC_ABERRATION, maxPixelRatio = 2,
+        backdrop = null, fit = "cover", live = false, appearance = "auto", stacking = "overlap", lightAngle = 0, chromaticAberration = DEFAULT_CHROMATIC_ABERRATION, maxPixelRatio = 2,
         active = true, tinted = false, reduceTransparency = "auto", increaseContrast = "auto", reduceMotion = "auto", buttonShapes = false,
         extendedRange = false, headroom = 1, displayHeadroom, fixed = true, className, style, children
     } = props;
@@ -109,7 +109,7 @@ export function GlassCanvas(props: GlassCanvasProps): ReactElement {
         ensureStyle();
         const p = latest.current;
         const made = createGlass(el, {
-            appearance: p.appearance ?? "auto", stacking: p.stacking ?? "exact", lightAngle: p.lightAngle ?? 0, chromaticAberration: p.chromaticAberration ?? DEFAULT_CHROMATIC_ABERRATION,
+            appearance: p.appearance ?? "auto", stacking: p.stacking ?? "overlap", lightAngle: p.lightAngle ?? 0, chromaticAberration: p.chromaticAberration ?? DEFAULT_CHROMATIC_ABERRATION,
             maxPixelRatio: p.maxPixelRatio ?? 2, extendedRange: p.extendedRange ?? false, headroom: p.displayHeadroom ?? p.headroom ?? 1,
             environment: {
                 active: p.active ?? true, tinted: p.tinted ?? false, reduceTransparency: p.reduceTransparency ?? "auto",

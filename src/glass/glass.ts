@@ -283,7 +283,7 @@ export class Glass {
         this.update();
     }
 
-    /** @brief Glass over glass: "exact" (default), "overlap" or "flat". */
+    /** @brief Glass over glass: "overlap" (default), "exact" or "flat". */
     setStacking(mode: StackingMode): void {
         this.renderer.setStacking(stackingOf(mode));
         this.update();
@@ -517,7 +517,7 @@ export class Glass {
 }
 
 function stackingOf(mode: StackingMode): Stacking {
-    return mode === "flat" ? STACKING_FLAT : mode === "overlap" ? STACKING_OVERLAP : STACKING_EXACT;
+    return mode === "flat" ? STACKING_FLAT : mode === "exact" ? STACKING_EXACT : STACKING_OVERLAP;
 }
 
 /**

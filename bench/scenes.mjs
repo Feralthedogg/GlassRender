@@ -3,7 +3,7 @@
 // it the GPU drops the draws of all frames but the last and the numbers come out far too low). The time is the wall
 // clock from the first frame to a blocking read after the last one, per frame.
 import {
-    CORNER_SMOOTH, ENV_INCREASE_CONTRAST, SCHEME_DARK, SCHEME_LIGHT, STACKING_FLAT, STACKING_OVERLAP, createRenderer
+    CORNER_SMOOTH, ENV_INCREASE_CONTRAST, SCHEME_DARK, SCHEME_LIGHT, STACKING_EXACT, STACKING_FLAT, STACKING_OVERLAP, createRenderer
 } from "../dist/index.js";
 
 const W = 2000, H = 1400, SCALE = 2;
@@ -105,8 +105,8 @@ async function measure(name, scene, frames, backdrop) {
     const r = made.value;
     r.resize(W, H, SCALE);
     r.setBackdropSource(backdrop);
-    if (scene.flat) r.setStacking(STACKING_FLAT);
-    if (scene.overlap) r.setStacking(STACKING_OVERLAP);
+    // scenes without a mode in their record measure exact stacking
+    r.setStacking(scene.flat ? STACKING_FLAT : scene.overlap ? STACKING_OVERLAP : STACKING_EXACT);
     // the panel is drawn first, the row over it; the moved shape is the first of the row
     const shapes = scene.panelFirst ? PANEL.concat(ROW) : scene.shapes;
     const handles = shapes.map((s) => add(r, s));

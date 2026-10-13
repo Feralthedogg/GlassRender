@@ -535,7 +535,7 @@ export const FUNCTIONAL = {
         equal(distance(frameOf(glass, true), expected), 0, "HDR again"); glass.destroy();
     },
     "many overlapping shapes draw without errors in both stacking modes": () => {
-        const glass = makeGlass();
+        const glass = makeGlass({ stacking: "exact" });
         // larger than the adaptive size: the tone of small glass depends on what it has been over before
         for (let i = 0; i < 120; i++) glass.add({ x: 10 + (i % 15) * 38 + (i >> 4) * 3, y: 10 + Math.floor(i / 15) * 42, width: 90, height: 80, radius: 14, appearance: i % 3 ? "dark" : "light" });
         const a = frameOf(glass);

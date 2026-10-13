@@ -680,11 +680,11 @@ export class Renderer extends Frame {
 
     /**
      * @brief Choose how shapes that lie over other shapes are drawn.
-     * @param mode `STACKING_EXACT` (default): a shape refracts the glass below it; every layer of
-     * overlap costs one more group of capture passes. `STACKING_OVERLAP`: a shape refracts the lower
-     * glass and shadows its body covers, but not glass its blur or refraction only reaches, so glass
-     * laid side by side is captured in one batch. `STACKING_FLAT`: every shape refracts the backdrop
-     * only and all shapes are drawn in one batch.
+     * @param mode `STACKING_OVERLAP` (default): a shape refracts the lower glass and shadows its body
+     * covers, but not glass its blur or refraction only reaches, so glass laid side by side is
+     * captured in one batch. `STACKING_EXACT`: a shape refracts all the glass below it that its
+     * lookups reach; every layer of that costs one more group of capture passes. `STACKING_FLAT`:
+     * every shape refracts the backdrop only and all shapes are drawn in one batch.
      */
     setStacking(mode: Stacking): void {
         const flat = mode === STACKING_FLAT, overlap = mode === STACKING_OVERLAP;

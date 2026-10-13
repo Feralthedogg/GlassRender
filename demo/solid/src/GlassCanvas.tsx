@@ -40,7 +40,7 @@ export function GlassCanvas(props: GlassCanvasProps): JSX.Element {
     onMount(() => {
         ensureStyle();
         const made = createGlass(canvas, {
-            appearance: local.appearance ?? "auto", stacking: local.stacking ?? "exact", lightAngle: local.lightAngle ?? 0,
+            appearance: local.appearance ?? "auto", stacking: local.stacking ?? "overlap", lightAngle: local.lightAngle ?? 0,
             chromaticAberration: local.chromaticAberration ?? DEFAULT_CHROMATIC_ABERRATION, maxPixelRatio: local.maxPixelRatio ?? 2,
             extendedRange: local.extendedRange ?? false, displayHeadroom: local.displayHeadroom ?? local.headroom ?? 1,
             environment: { active: local.active ?? true, tinted: local.tinted ?? false, reduceTransparency: local.reduceTransparency ?? "auto",
@@ -53,7 +53,7 @@ export function GlassCanvas(props: GlassCanvasProps): JSX.Element {
         onCleanup(() => { setGlass(null); instance.destroy(); });
     });
     createEffect(() => { glass()?.setAppearance(local.appearance ?? "auto"); });
-    createEffect(() => { glass()?.setStacking(local.stacking ?? "exact"); });
+    createEffect(() => { glass()?.setStacking(local.stacking ?? "overlap"); });
     createEffect(() => { glass()?.setLightAngle(local.lightAngle ?? 0); });
     createEffect(() => { glass()?.setChromaticAberration(local.chromaticAberration ?? DEFAULT_CHROMATIC_ABERRATION); });
     createEffect(() => { glass()?.setExtendedRange(local.extendedRange ?? false, local.displayHeadroom ?? local.headroom ?? 1); });

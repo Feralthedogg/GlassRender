@@ -160,7 +160,7 @@ export abstract class State {
     protected layoutDirty: boolean;
     protected layered: boolean;
     protected flat: boolean;
-    // Overlap stacking: a shape reads lower glass only where its body covers that glass or its shadow.
+    // Overlap stacking (the default): a shape reads lower glass only where its body covers that glass or its shadow.
     protected overlap: boolean;
     protected env: number;
     protected extended: boolean;
@@ -294,7 +294,7 @@ export abstract class State {
         this.layoutDirty = true;
         this.layered = false;
         this.flat = false;
-        this.overlap = false;
+        this.overlap = true;
         this.env = 0;
         this.extended = false;
         this.wantExtended = false;

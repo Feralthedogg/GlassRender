@@ -157,7 +157,7 @@ The convenience API's `shape.set()` returns the shape so you can chain calls. Re
 | `appearance` | `"auto"`, `"light"`, `"dark"` | `"auto"` | Default appearance for the shapes. `auto` follows the page's preferred color scheme. |
 | `autoResize` | `boolean` | `true` | Matches the drawing buffer to the displayed canvas size and device pixel ratio. |
 | `maxPixelRatio` | Positive number | `2` | Maximum drawing-buffer pixels per CSS pixel. Set it at creation; there is no setter. |
-| `stacking` | `"exact"`, `"overlap"`, `"flat"` | `"exact"` | What glass refracts besides the backdrop: all glass beneath it, only the glass and shadows it lies over, or nothing. See [Stacking](#stacking). |
+| `stacking` | `"overlap"`, `"exact"`, `"flat"` | `"overlap"` | What glass refracts besides the backdrop: the glass and shadows it lies over, all glass its lookups reach, or nothing. See [Stacking](#stacking). |
 | `lightAngle` | Radians | `0` | Rotates all rim lights clockwise. |
 | `chromaticAberration` | Number from `0` to `1` | `0.25` | Default color-separation multiplier for shapes and groups. |
 | `environment` | `EnvironmentOptions` | See below | Window activity and accessibility settings. |
@@ -203,7 +203,7 @@ glass.setAppearance("dark");
 | `setEnvironment(options)` | `void` | Updates only the supplied environment fields. |
 | `setLightAngle(radians)` | `void` | Rotates rim lights. |
 | `setChromaticAberration(strength)` | `void` | Changes the canvas default for items that inherit it. |
-| `setStacking("exact", "overlap" or "flat")` | `void` | Changes how overlapping glass is drawn. |
+| `setStacking("overlap", "exact" or "flat")` | `void` | Changes how overlapping glass is drawn. |
 | `setExtendedRange(on, headroom?)` | `boolean` | Sets extended range and returns whether it is active now. |
 | `setDisplayBrightness(state)` | `Result<number>` | Resolves host-supplied brightness state into display headroom without changing the selected output range. Invalid input preserves the prior headroom and frame. |
 | `resize(width?, height?, ratio?)` | `void` | Sets the buffer size from CSS dimensions and pixel ratio. With no arguments, reads the DOM size and device ratio. |
@@ -347,9 +347,9 @@ The React, Svelte, Vue and Solid adapters expose the same property on `GlassCanv
 
 ## Stacking
 
-Glass drawn over other glass refracts what lies beneath it. With the default `stacking: "exact"`, a shape sees every lower shape its blur and refraction reach, including neighbours whose shadows or edges only come within that reach. Each such dependency adds a capture pass, so glass laid side by side can need many passes: a 24-shape grid with touching shadows took 12, and a row of 10 small buttons on a panel took 11.
+Glass drawn over other glass refracts what lies beneath it. With the default `stacking: "overlap"`, a shape sees the lower glass and shadows it lies over. Glass that only comes within the reach of its blur or refraction, such as a neighbour in a row, is left out, so glass laid side by side is captured together.
 
-`stacking: "overlap"` keeps glass over glass, and shadows seen through glass, exactly as `"exact"` draws them, but does not wait for neighbouring glass that only lies within the reach of a shape's blur or refraction. The grid then takes 7 passes and the row of buttons 2. In those scenes at most 1.1% of the pixels changed, by at most 7/255, and all but 0.01% of the image by 2/255 or less. `stacking: "flat"` draws every shape from the original backdrop in one pass.
+`stacking: "exact"` also includes those neighbours. Each such dependency adds a capture pass: a 24-shape grid with touching shadows takes 12 passes instead of 7, and a row of 10 small buttons on a panel takes 11 instead of 2. Glass over glass, and shadows seen through glass, look the same in both modes; in those two scenes at most 1.1% of the pixels differ, by at most 7/255, and all but 0.01% of the image by 2/255 or less. `stacking: "flat"` draws every shape from the original backdrop in one pass.
 
 ## Following an HTML element
 
@@ -901,7 +901,7 @@ function Panel() {
 | `fit` | `"cover"` | `cover`, `contain` or `stretch`. |
 | `live` | `false` | Uploads a video or canvas object on every frame. URL strings are loaded as static images. |
 | `appearance` | `"auto"` | Default appearance. |
-| `stacking` | `"exact"` | How overlapping glass is drawn: `"exact"`, `"overlap"` or `"flat"`. |
+| `stacking` | `"overlap"` | How overlapping glass is drawn: `"overlap"`, `"exact"` or `"flat"`. |
 | `lightAngle` | `0` | Rim-light rotation in radians. |
 | `chromaticAberration` | `0.25` | Default color-separation multiplier for descendant glass (`0..1`). |
 | `maxPixelRatio` | `2` | Maximum drawing-buffer pixels per CSS pixel. |
@@ -1365,7 +1365,7 @@ Convenience option types are exported by `glassrender/core`. `Preset` is also ex
 | `Radius` | One number or a readonly tuple of four radii. |
 | `Transition` | `"materialize"` or `"none"`. |
 | `Fit` | `"cover"`, `"contain"` or `"stretch"`. |
-| `StackingMode` | `"exact"`, `"overlap"` or `"flat"`. |
+| `StackingMode` | `"overlap"`, `"exact"` or `"flat"`. |
 | `Follow` | `boolean` or `"auto"`. |
 | `Foreground` | CSS color strings for `text` and `title`. |
 | `Ok<T>`, `Err`, `Result<T>` | Success and failure result types. |
@@ -1402,7 +1402,7 @@ glass.add(options);
 | Removing a backdrop | `setBackdrop(null)`, `clearBackdrop()` and the component canvas's `backdrop={null}` remove uploaded pixels and retained sources. |
 | Text remains when the glass is hidden | `visible` controls the glass effect. Manage DOM visibility in your app. |
 | The first use of a material pauses briefly | The browser compiles the shaders of each new combination of preset, tint, outline kind and group size the first time it is drawn. Pressing, opacity and adding group members up to the next of 1, 2, 4, 8 and 16 reuse compiled shaders, and where the browser compiles in the background the tinted variant and the next group size are prepared ahead. Show the presets a page needs once at load time (for example hidden) to compile them before interaction. |
-| Many overlapping shapes are slow | `stacking: "overlap"` keeps glass over glass exact but stops glass placed side by side from waiting for its neighbours; `stacking: "flat"` makes each shape read only the original backdrop. Adjust output resolution with `maxPixelRatio`. |
+| Many overlapping shapes are slow | The default `stacking: "overlap"` already keeps glass placed side by side from waiting for its neighbours; `stacking: "flat"` makes each shape read only the original backdrop. Adjust output resolution with `maxPixelRatio`. |
 | Direct renderer changes do not appear | After changing `glass.renderer`, call `glass.update()`. With a standalone `Renderer`, schedule a render frame. |
 | Extended range stays disabled | Check the initial creation option and browser output support, and read the actual return value. |
 
