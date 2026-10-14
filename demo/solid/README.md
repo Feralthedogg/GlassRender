@@ -2,7 +2,7 @@
 
 Solid components for GlassRender: `GlassCanvas`, `Glass`, `GlassGroup` and `useGlass()`.
 
-Requires Solid 1.9 or later and GlassRender 0.1.1 Beta. The generated JSX is compiled by your Solid application toolchain.
+Requires Solid 1.9 or later and GlassRender 0.1.2 Beta. The generated JSX is compiled by your Solid application toolchain.
 
 Install the core and adapter in your existing Solid app:
 
@@ -10,7 +10,7 @@ Install the core and adapter in your existing Solid app:
 npm install glassrender@beta glassrender-solid@beta
 ```
 
-To pin this release, use `glassrender@0.1.1-beta glassrender-solid@0.1.1-beta`.
+To pin this release, use `glassrender@0.1.2-beta glassrender-solid@0.1.2-beta`.
 
 ```tsx
 import { createSignal } from "solid-js";
@@ -18,7 +18,7 @@ import { GlassCanvas, Glass } from "glassrender-solid";
 
 export default function Panel() {
     const [opacity, setOpacity] = createSignal(1);
-    return <GlassCanvas backdrop="/wallpaper.jpg">
+    return <GlassCanvas>
         <Glass preset="standard" radius={24} opacity={opacity()} style={{ padding: "24px", width: "320px" }}>
             <button onClick={() => setOpacity(opacity() === 1 ? 0.6 : 1)}>Change opacity</button>
         </Glass>
@@ -26,16 +26,18 @@ export default function Panel() {
 }
 ```
 
+`backdrop` is optional: omit it for the built-in SVG background, supply your own URL, image, canvas or video, or pass `null` to clear it.
+
 `GlassCanvas` owns the renderer and cleans it up on unmount. `Glass` follows its DOM box; set `everyFrame` for CSS animations. Inside `GlassGroup`, its children supply outlines and the group supplies their material. Use `class` and Solid's DOM event names such as `onClick`.
 
 `useGlass()` returns `null` outside a canvas. Inside it, `glass` and `error` are reactive getters; read them inside an effect without destructuring the state object. WebGL initialization runs after client mount, so server rendering produces markup without creating a canvas context.
 
-From `demo/solid`, run the repository demo:
+For a checkout, build the core from the repository root with `npm ci && npm run build`. Then run the demo from `demo/solid`:
 
 ```sh
 npm ci
-npm run check
 npm run build
+npm run check
 npm run demo
 ```
 

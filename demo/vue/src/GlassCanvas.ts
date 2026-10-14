@@ -5,7 +5,7 @@
  */
 
 import { defineComponent, h, onBeforeUnmount, onMounted, provide, shallowReactive, shallowRef, watch, type CSSProperties, type PropType } from "vue";
-import { createGlass, DEFAULT_CHROMATIC_ABERRATION, type Appearance, type Fit, type Follow, type StackingMode } from "glassrender";
+import { createGlass, DEFAULT_BACKDROP, DEFAULT_CHROMATIC_ABERRATION, type Appearance, type Fit, type Follow, type StackingMode } from "glassrender";
 import { CANVAS_KEY, ensureStyle, type CanvasState } from "./context.js";
 
 const COVER: CSSProperties = { position: "absolute", inset: "0", width: "100%", height: "100%", display: "block", zIndex: -1, pointerEvents: "none" };
@@ -15,8 +15,8 @@ const FIXED: CSSProperties = { ...COVER, position: "fixed", width: "100vw", heig
 export const GlassCanvas = defineComponent({
     name: "GlassCanvas",
     props: {
-        /** @brief Picture behind the glass: a URL, or an image, canvas, video or bitmap. */
-        backdrop: { type: [String, Object] as PropType<string | TexImageSource | null>, default: null },
+        /** @brief Picture behind the glass. Omit for the built-in SVG; null clears the backdrop. */
+        backdrop: { type: [String, Object] as PropType<string | TexImageSource | null>, default: DEFAULT_BACKDROP },
         /** @brief How a backdrop of another size is laid on the canvas (default "cover"). */
         fit: { type: String as PropType<Fit>, default: "cover" },
         /** @brief Upload the backdrop on every frame (a playing video, an animated canvas). */

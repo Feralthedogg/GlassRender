@@ -5,12 +5,12 @@
  */
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from "react";
-import { createGlass, DEFAULT_CHROMATIC_ABERRATION, type Appearance, type Fit, type Follow, type StackingMode } from "glassrender";
+import { createGlass, DEFAULT_BACKDROP, DEFAULT_CHROMATIC_ABERRATION, type Appearance, type Fit, type Follow, type StackingMode } from "glassrender";
 import { CanvasContext, ensureStyle, type CanvasState } from "./context.js";
 
 /** @brief Canvas placement, backdrop and environment options for descendant glass components. */
 export interface GlassCanvasProps {
-    /** @brief Picture behind the glass: a URL, or an image, canvas, video or bitmap. */
+    /** @brief Picture behind the glass. Omit for the built-in SVG; null clears the backdrop. */
     backdrop?: string | TexImageSource | null;
     /** @brief How a backdrop of another size is laid on the canvas (default "cover"). */
     fit?: Fit;
@@ -92,7 +92,7 @@ const FIXED: CSSProperties = { ...COVER, position: "fixed", width: "100vw", heig
 /** @brief Own the canvas and renderer shared by descendant glass components. */
 export function GlassCanvas(props: GlassCanvasProps): ReactElement {
     const {
-        backdrop = null, fit = "cover", live = false, appearance = "auto", stacking = "overlap", lightAngle = 0, chromaticAberration = DEFAULT_CHROMATIC_ABERRATION, maxPixelRatio = 2,
+        backdrop = DEFAULT_BACKDROP, fit = "cover", live = false, appearance = "auto", stacking = "overlap", lightAngle = 0, chromaticAberration = DEFAULT_CHROMATIC_ABERRATION, maxPixelRatio = 2,
         active = true, tinted = false, reduceTransparency = "auto", increaseContrast = "auto", reduceMotion = "auto", buttonShapes = false,
         extendedRange = false, headroom = 1, displayHeadroom, fixed = true, className, style, children
     } = props;

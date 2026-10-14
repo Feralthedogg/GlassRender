@@ -1,6 +1,6 @@
 {
     "name": "glassrender-svelte",
-    "version": "0.1.1-beta",
+    "version": "0.1.2-beta",
     "description": "Svelte components for the GlassRender glass material renderer.",
     "license": "MIT",
     "repository": {
@@ -45,7 +45,7 @@
         "build:demo": "vite build --config vite.config.js"
     },
     "peerDependencies": {
-        "glassrender": "^0.1.1-beta",
+        "glassrender": "^0.1.2-beta",
         "svelte": "^5.0.0"
     },
     "devDependencies": {

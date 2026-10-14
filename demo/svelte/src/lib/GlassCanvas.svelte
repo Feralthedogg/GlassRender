@@ -6,12 +6,12 @@
      */
 
     import { onMount, setContext, untrack, type Snippet } from "svelte";
-    import { createGlass, DEFAULT_CHROMATIC_ABERRATION, type Appearance, type Fit, type Follow, type StackingMode } from "glassrender";
+    import { createGlass, DEFAULT_BACKDROP, DEFAULT_CHROMATIC_ABERRATION, type Appearance, type Fit, type Follow, type StackingMode } from "glassrender";
     import { CANVAS_KEY, type CanvasState } from "./context.js";
 
     /** @brief Canvas placement, backdrop and environment options for descendant glass components. */
     interface Props {
-        /** @brief Picture behind the glass: a URL, or an image, canvas, video or bitmap. */
+        /** @brief Picture behind the glass. Omit for the built-in SVG; null clears the backdrop. */
         backdrop?: string | TexImageSource | null;
         /** @brief How a backdrop of another size is laid on the canvas (default "cover"). */
         fit?: Fit;
@@ -89,7 +89,7 @@
     }
 
     let {
-        backdrop = null, fit = "cover", live = false, appearance = "auto", stacking = "overlap", lightAngle = 0, chromaticAberration = DEFAULT_CHROMATIC_ABERRATION,
+        backdrop = DEFAULT_BACKDROP, fit = "cover", live = false, appearance = "auto", stacking = "overlap", lightAngle = 0, chromaticAberration = DEFAULT_CHROMATIC_ABERRATION,
         maxPixelRatio = 2, active = true, tinted = false, reduceTransparency = "auto", increaseContrast = "auto",
         reduceMotion = "auto", buttonShapes = false, extendedRange = false, headroom = 1, displayHeadroom, fixed = true, class: className = "", onerror,
         oncontextlost, oncontextrestored, children

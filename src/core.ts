@@ -4,6 +4,7 @@
  */
 
 export { createGlass } from "./glass/glass.js";
+export { DEFAULT_BACKDROP } from "./default-backdrop.js";
 export { DEFAULT_CHROMATIC_ABERRATION } from "./layout.js";
 export { resolveDisplayHeadroom, type DisplayBrightness } from "./hdr.js";
 export type { BackdropPixels } from "./layout.js";

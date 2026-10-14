@@ -11,6 +11,7 @@ export {
     type BackdropPixels, type Scheme, type Stacking
 } from "./layout.js";
 export type { Rgb, Rgba } from "./material.js";
+export { DEFAULT_BACKDROP } from "./default-backdrop.js";
 export {
     PRESET_ASSISTANT, PRESET_ASSISTANT_CARD, PRESET_ATTACHED_SIDEBAR, PRESET_BUBBLE, PRESET_CALL,
     PRESET_CAMERA, PRESET_CLEAR, PRESET_CONTROL, PRESET_CONTROL_PANEL, PRESET_COUNT, PRESET_DOCK, PRESET_FOCUS_BACKGROUND,

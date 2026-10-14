@@ -1,6 +1,6 @@
 {
     "name": "glassrender",
-    "version": "0.1.1-beta",
+    "version": "0.1.2-beta",
     "description": "Real-time refractive glass material renderer for WebGL2.",
     "license": "MIT",
     "repository": {

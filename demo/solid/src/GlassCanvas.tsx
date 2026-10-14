@@ -1,8 +1,9 @@
 import { createEffect, createSignal, onMount, onCleanup, splitProps, type JSX } from "solid-js";
-import { createGlass, DEFAULT_CHROMATIC_ABERRATION, type Glass as CoreGlass, type Appearance, type Fit, type Follow, type StackingMode } from "glassrender";
+import { createGlass, DEFAULT_BACKDROP, DEFAULT_CHROMATIC_ABERRATION, type Glass as CoreGlass, type Appearance, type Fit, type Follow, type StackingMode } from "glassrender";
 import { CanvasContext, ensureStyle, type CanvasState } from "./context.js";
 
 export interface GlassCanvasProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "onError" | "onContextLost" | "onContextRestored"> {
+    /** Picture behind the glass. Omit for the built-in SVG; null clears the backdrop. */
     backdrop?: string | TexImageSource | null;
     fit?: Fit;
     live?: boolean;
@@ -61,7 +62,7 @@ export function GlassCanvas(props: GlassCanvasProps): JSX.Element {
         reduceTransparency: local.reduceTransparency ?? "auto", increaseContrast: local.increaseContrast ?? "auto",
         reduceMotion: local.reduceMotion ?? "auto", buttonShapes: local.buttonShapes ?? false }); });
     createEffect(() => {
-        const instance = glass(), source = local.backdrop ?? null, fit = local.fit ?? "cover", live = local.live ?? false;
+        const instance = glass(), source = local.backdrop === undefined ? DEFAULT_BACKDROP : local.backdrop, fit = local.fit ?? "cover", live = local.live ?? false;
         if (!instance) return;
         if (typeof source === "string") {
             const image = new Image(); image.crossOrigin = "anonymous"; image.src = source;

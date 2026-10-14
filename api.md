@@ -1,6 +1,6 @@
 # GlassRender API Guide
 
-GlassRender renders glass material presets over an image, canvas or video using WebGL2. This guide covers `glassrender` 0.1.1 Beta and its React, Svelte, Vue and Solid adapters, all at version `0.1.1-beta`. Select one of the 28 presets with the `preset` option.
+GlassRender renders glass material presets over an image, canvas or video using WebGL2. This guide covers `glassrender` 0.1.2 Beta and its React, Svelte, Vue and Solid adapters, all at version `0.1.2-beta`. Select one of the 28 presets with the `preset` option.
 
 To get started, create a canvas with `createGlass()` and add a piece of glass with `glass.add()`. In a React, Svelte, Vue or Solid app, place `Glass` components inside `GlassCanvas`. The components follow their DOM boxes, so you do not have to calculate their positions and sizes yourself.
 
@@ -24,7 +24,7 @@ Jump to the section you need:
 
 ## Finding the right API
 
-Import `createGlass` and convenience types from `glassrender/core`, preset names and metadata from `glassrender/materials`, and renderer/numeric APIs from `glassrender/advanced`. The root `glassrender` entry carries the canvas API, the catalog and the renderer with its constants in one import. Material descriptions, numeric helpers such as `presetMaterial()` and `packMaterial()`, and `MATERIAL_LAYOUT` are only in `glassrender/advanced`.
+Import `createGlass` and convenience types from `glassrender/core`, preset names and metadata from `glassrender/materials`, and renderer/numeric APIs from `glassrender/advanced`. The root `glassrender` entry carries the canvas API, the catalog and the renderer with its constants in one import. `presetMaterial()` also comes from `glassrender/materials`. Other numeric helpers such as `packMaterial()` and `MATERIAL_LAYOUT` come from `glassrender/advanced`.
 
 | What you want to do | API | What it does |
 | --- | --- | --- |
@@ -638,19 +638,11 @@ Unknown names are rejected. An existing item retains its accepted preset on reje
 
 ## React components
 
-`glassrender-react` exports `GlassCanvas`, `Glass`, `GlassGroup` and `useGlass`. Use the following as `App.tsx`. The README's React example covers the app entry point and npm installation.
+`glassrender-react` exports `GlassCanvas`, `Glass`, `GlassGroup` and `useGlass`. Use the following as `App.tsx`. The README gives a minimal component and npm installation instructions.
 
 ```tsx
 import { useState } from "react";
 import { Glass, GlassCanvas } from "glassrender-react";
-
-const backdrop = "data:image/svg+xml," + encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500">' +
-    '<rect width="800" height="500" fill="#163350"/>' +
-    '<circle cx="300" cy="200" r="180" fill="#7960e8"/>' +
-    '<path d="M0 400L800 100V500H0Z" fill="#e58c53"/>' +
-    '</svg>'
-);
 
 export default function App() {
     const [visible, setVisible] = useState(true);
@@ -659,7 +651,6 @@ export default function App() {
         <>
             <button onClick={() => setVisible((value) => !value)}>Toggle glass</button>
             <GlassCanvas
-                backdrop={backdrop}
                 fixed={false}
                 style={{ height: 420 }}
                 onError={(message) => console.error(message)}
@@ -734,18 +725,11 @@ Use `glassrender-svelte` with Svelte 5. The following is an `App.svelte` example
 
     let visible = $state(true);
     let count = $state(0);
-    const backdrop = "data:image/svg+xml," + encodeURIComponent(
-        '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500">' +
-        '<rect width="800" height="500" fill="#163350"/>' +
-        '<circle cx="300" cy="200" r="180" fill="#7960e8"/>' +
-        '<path d="M0 400L800 100V500H0Z" fill="#e58c53"/>' +
-        '</svg>'
-    );
 </script>
 
 <button onclick={() => { visible = !visible; }}>Toggle glass</button>
 <div style="height: 420px;">
-    <GlassCanvas {backdrop} fixed={false} onerror={(message) => console.error(message)}>
+    <GlassCanvas fixed={false} onerror={(message) => console.error(message)}>
         <main style="height: 420px; display: grid; place-items: center;">
             <Glass preset="standard" radius={24} {visible}
                 onscheme={(scheme) => console.log("Shown scheme:", scheme)}
@@ -802,13 +786,6 @@ import { Glass, GlassCanvas } from "glassrender-vue";
 
 const visible = ref(true);
 const count = ref(0);
-const backdrop = "data:image/svg+xml," + encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500">' +
-    '<rect width="800" height="500" fill="#163350"/>' +
-    '<circle cx="300" cy="200" r="180" fill="#7960e8"/>' +
-    '<path d="M0 400L800 100V500H0Z" fill="#e58c53"/>' +
-    '</svg>'
-);
 
 function logError(message: string) { console.error(message); }
 function logScheme(scheme: "dark" | "light") { console.log("Shown scheme:", scheme); }
@@ -816,7 +793,7 @@ function logScheme(scheme: "dark" | "light") { console.log("Shown scheme:", sche
 
 <template>
     <button @click="visible = !visible">Toggle glass</button>
-    <GlassCanvas :backdrop="backdrop" :fixed="false" style="height: 420px;" @error="logError">
+    <GlassCanvas :fixed="false" style="height: 420px;" @error="logError">
         <main style="height: 100%; display: grid; place-items: center;">
             <Glass preset="standard" :radius="24" :visible="visible" @scheme="logScheme"
                 style="width: 280px; padding: 24px;">
@@ -869,7 +846,7 @@ All four adapters use the same roles: `GlassCanvas` manages the canvas and core 
 
 ### Solid
 
-`glassrender-solid` exposes `GlassCanvas`, `Glass`, `GlassGroup`, `useGlass()` and their props types. It uses Solid 1.9 or later and your application's Solid JSX compiler. Install the adapter with `npm install glassrender@beta glassrender-solid@beta`; see the [usage example](README.md#solid).
+`glassrender-solid` exposes `GlassCanvas`, `Glass`, `GlassGroup`, `useGlass()` and their props types. It uses Solid 1.9 or later and your application's Solid JSX compiler. Install the adapter with `npm install glassrender@beta glassrender-solid@beta`; see the [usage example](README.md#frameworks).
 
 ```tsx
 import { createEffect, createSignal } from "solid-js";
@@ -883,7 +860,7 @@ function Status() {
 
 function Panel() {
     const [opacity, setOpacity] = createSignal(1);
-    return <GlassCanvas backdrop="/wallpaper.jpg">
+    return <GlassCanvas>
         <Status />
         <Glass preset="standard" radius={24} opacity={opacity()} style={{ padding: "24px" }}>
             <button onClick={() => setOpacity(opacity() === 1 ? 0.5 : 1)}>Change opacity</button>
@@ -898,7 +875,7 @@ function Panel() {
 
 | Prop | Default | Description |
 | --- | --- | --- |
-| `backdrop` | `null` | An image URL string or a `TexImageSource` object. |
+| `backdrop` | `DEFAULT_BACKDROP` | Optional image URL string or `TexImageSource`. Omitted or `undefined` uses the built-in SVG; `null` clears the backdrop. |
 | `fit` | `"cover"` | `cover`, `contain` or `stretch`. |
 | `live` | `false` | Uploads a video object when it shows a new picture and a canvas object on every frame. URL strings are loaded as static images. |
 | `appearance` | `"auto"` | Default appearance. |
@@ -915,6 +892,8 @@ function Panel() {
 | `displayHeadroom` | Omitted | Preferred display multiplier name; takes precedence over `headroom`. |
 | `fixed` | `true` | The canvas covers the viewport; `false` makes it cover the component's area. |
 | Content and styling | Framework syntax | React uses `children`, `className`, `style`; Svelte uses `children`, `class`; Vue uses its default slot and `class`, `style` attributes; Solid uses `children`, `class`, `style` and `ref`. |
+
+`DEFAULT_BACKDROP`, exported from `glassrender` and `glassrender/core`, is the built-in SVG data URL. To supply your own background, pass `backdrop="/wallpaper.jpg"` (`:backdrop="'/wallpaper.jpg'"` in Vue). The core `createGlass()` API keeps its empty backdrop when the option is omitted.
 
 Pass environment settings as individual `GlassCanvas` props. The core API instead groups them under `environment`. Adapters resize automatically. With `fixed: false`, give the container an actual height. Svelte's `GlassCanvas` has no `style` prop, so size it through an outer container or a class, as in the example above.
 
@@ -1114,7 +1093,7 @@ If you handle context loss yourself, call `event.preventDefault()` in `webglcont
 
 ## Material calculation and packing
 
-Import these helpers from `glassrender/advanced`; they also remain available through the root `glassrender` entry. Most apps need only `preset`; these helpers expose built-in values for inspection or independent rendering pipelines.
+Import these helpers from `glassrender/advanced`. `presetMaterial()` is also exported by `glassrender/materials`. Most apps need only `preset`; these helpers expose built-in values for inspection or independent rendering pipelines.
 
 ### Preset descriptions and numeric vectors
 
@@ -1348,7 +1327,7 @@ The convenience API uses string settings. The low-level API uses these numeric c
 
 Combine environment bits with bitwise OR, for example `renderer.setEnvironment(ENV_INACTIVE | ENV_INCREASE_CONTRAST)`. The default active environment is `0`. All preset-number constants appear in the preset list above.
 
-Convenience option types are exported by `glassrender/core`. `Preset` is also exported by `glassrender/materials`, while numeric material types are exported by `glassrender/advanced` and the root entry. Use `import type` to avoid runtime imports.
+Convenience option types are exported by `glassrender/core`. `Preset` is also exported by `glassrender/materials`, while numeric material types are exported by `glassrender/advanced`. `MaterialSpec` is also exported by `glassrender/materials`; `Rgb` and `Rgba` are available from the core and root entries. Use `import type` to avoid runtime imports.
 
 | Type | Meaning |
 | --- | --- |

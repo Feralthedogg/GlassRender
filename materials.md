@@ -25,7 +25,7 @@ The table contains 28 configurations, two appearance schemes and nine environmen
 
 The independent numeric fixture contains 1,624 samples and 191,632 mapped parameter values. Comparisons use `2e-6 × max(1, abs(referenceValue))` to account for interpolation and Float32 rounding. Passing this comparison does not establish identical pixels for every shape, backdrop or browser.
 
-The development checks cover type checking, initialization, profile selection, masks, groups, backdrop updates, context recovery, accessibility and extended output. Adapter regressions cover child buttons and links, keyboard activation, pointer release and touch cancellation across React, Svelte and Vue.
+The development checks cover type checking, initialization, profile selection, masks, groups, backdrop updates, context recovery, accessibility and extended output. Adapter regressions cover child buttons and links, keyboard activation, pointer release and touch cancellation across React, Svelte, Vue and Solid. Canvas regressions check the default backdrop, URL and live-canvas overrides, explicit clearing and restoring the default.
 
 Image and intermediate-buffer comparisons are separate from functional tests. Mask outlines are reconstructed from raster coverage, so their corners and gradients can differ from a vector outline. Packed distance filtering retains a small precision discrepancy in the verified controls. Extended output also depends on the browser's presentation support and the supplied color-surface configuration.
 

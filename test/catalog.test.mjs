@@ -52,5 +52,5 @@ test("the root entry carries the canvas API, the catalog and the renderer; numer
         assert.ok(name in advanced, "advanced " + name);
     }
     for (const name of Object.keys(root)) assert.ok(name in advanced, "advanced repeats root " + name);
-    assert.deepEqual(Object.keys(core).sort(), ["DEFAULT_CHROMATIC_ABERRATION", "createGlass", "resolveDisplayHeadroom"]);
+    assert.deepEqual(Object.keys(core).sort(), ["DEFAULT_BACKDROP", "DEFAULT_CHROMATIC_ABERRATION", "createGlass", "resolveDisplayHeadroom"]);
 });

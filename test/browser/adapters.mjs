@@ -1,4 +1,4 @@
-// Input regression tests for interactive Glass in React, Svelte, Vue and Solid.
+// Canvas and input regression tests for React, Svelte, Vue and Solid.
 // Run: node test/browser/adapters.mjs
 // Bundles the checkout's adapter sources in memory; generated pages are removed after the run.
 import assert from "node:assert/strict";
@@ -209,21 +209,154 @@ const harness = `
     requestAnimationFrame(() => requestAnimationFrame(ready));
 `;
 
-async function buildFixture(adapter, grouped = false) {
+const canvasFixture = adapter => {
+    if (adapter === "react") return { extension: "tsx", code: `
+        import { useState } from "react";
+        import { createRoot } from "react-dom/client";
+        import { GlassCanvas } from "./src/GlassCanvas.tsx";
+        import { useGlass } from "./src/context.ts";
+        function Probe() { window.__canvasState = useGlass(); return null; }
+        function App() {
+            const [options, setOptions] = useState({});
+            window.__setBackdrop = (backdrop, live = false) => setOptions(backdrop === undefined ? {} : { backdrop, live });
+            return <GlassCanvas className="fixture-canvas" fixed={false} maxPixelRatio={1} {...options}><Probe /></GlassCanvas>;
+        }
+        const app = createRoot(document.getElementById("app"));
+        app.render(<App />);
+        window.__unmount = () => app.unmount();
+    ` };
+    if (adapter === "solid") return { extension: "tsx", code: `
+        import { createSignal } from "solid-js";
+        import { render } from "solid-js/web";
+        import { GlassCanvas } from "./src/GlassCanvas.tsx";
+        import { useGlass } from "./src/context.ts";
+        function Probe() { window.__canvasState = useGlass(); return null; }
+        function App() {
+            const [options, setOptions] = createSignal({});
+            window.__setBackdrop = (backdrop, live = false) => setOptions(backdrop === undefined ? {} : { backdrop, live });
+            return <GlassCanvas class="fixture-canvas" fixed={false} maxPixelRatio={1} {...options()}><Probe /></GlassCanvas>;
+        }
+        window.__unmount = render(() => <App />, document.getElementById("app"));
+    ` };
+    if (adapter === "svelte") return { extension: "js", code: `
+        import { mount, unmount } from "svelte";
+        import Fixture from "./__interactive_fixture.svelte";
+        const app = mount(Fixture, { target: document.getElementById("app") });
+        window.__setBackdrop = app.setBackdrop;
+        window.__unmount = () => unmount(app);
+    `, component: `
+        <script>
+            import GlassCanvas from "./src/lib/GlassCanvas.svelte";
+            import Probe from "./__canvas_probe.svelte";
+            let options = $state({});
+            export function setBackdrop(backdrop, live = false) { options = backdrop === undefined ? {} : { backdrop, live }; }
+        </script>
+        <GlassCanvas class="fixture-canvas" fixed={false} maxPixelRatio={1} {...options}><Probe /></GlassCanvas>
+    `, probe: `
+        <script>
+            import { getGlass } from "./src/lib/context.ts";
+            window.__canvasState = getGlass();
+        </script>
+    ` };
+    return { extension: "js", code: `
+        import { createApp, h, shallowRef } from "vue";
+        import { GlassCanvas } from "./src/GlassCanvas.ts";
+        import { useGlass } from "./src/context.ts";
+        const Probe = { setup() { window.__canvasState = useGlass(); return () => null; } };
+        const app = createApp({ setup() {
+            const options = shallowRef({});
+            window.__setBackdrop = (backdrop, live = false) => { options.value = backdrop === undefined ? {} : { backdrop, live }; };
+            return () => h(GlassCanvas, { class: "fixture-canvas", fixed: false, maxPixelRatio: 1, ...options.value }, { default: () => h(Probe) });
+        } });
+        app.mount("#app");
+        window.__unmount = () => app.unmount();
+    ` };
+};
+
+const canvasHarness = `
+    window.__pixel = (y = 100) => {
+        const glass = window.__canvasState.glass;
+        glass.render();
+        const gl = glass.canvas.getContext("webgl2"), pixel = new Uint8Array(4);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.readPixels(10, glass.canvas.height - y - 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+        return Array.from(pixel);
+    };
+    const ready = () => {
+        if ((window.__canvasState?.glass || window.__canvasState?.error) && window.__unmount) window.__ready = true;
+        else requestAnimationFrame(ready);
+    };
+    requestAnimationFrame(ready);
+`;
+
+async function runBackdropCases(evaluate, adapter) {
+    const results = [];
+    const pixel = async (expected, y = 100) => {
+        const actual = await evaluate(`new Promise(resolve => {
+            let frames = 0;
+            const sample = () => {
+                const actual = window.__pixel(${y});
+                if (actual.slice(0, 3).every((value, i) => Math.abs(value - ${JSON.stringify(expected)}[i]) <= 1) || ++frames === 120) resolve(actual);
+                else requestAnimationFrame(sample);
+            };
+            requestAnimationFrame(sample);
+        })`);
+        assert.ok(actual.slice(0, 3).every((value, i) => Math.abs(value - expected[i]) <= 1), `expected ${expected}, got ${actual}`);
+    };
+    const check = async (name, run) => {
+        try { await run(); results.push({ name: `${adapter} canvas: ${name}`, ok: true }); }
+        catch (error) { results.push({ name: `${adapter} canvas: ${name}`, ok: false, error: error.message }); }
+    };
+    try {
+        await check("omitted backdrop draws the built-in SVG", async () => {
+            assert.equal(await evaluate("window.__canvasState?.error"), "");
+            await pixel([22, 51, 80]);
+            await pixel([229, 140, 83], 300);
+        });
+        await check("a supplied URL replaces the default", async () => {
+            await evaluate(`(() => { window.__custom = document.createElement('canvas');
+                window.__custom.width = window.__custom.height = 8;
+                const ctx = window.__custom.getContext('2d'); ctx.fillStyle = 'rgb(200,30,60)'; ctx.fillRect(0,0,8,8);
+                window.__setBackdrop(window.__custom.toDataURL()); })()`);
+            await pixel([200, 30, 60]);
+        });
+        await check("a live canvas still uploads changing pixels", async () => {
+            await evaluate("window.__setBackdrop(window.__custom, true)");
+            await pixel([200, 30, 60]);
+            await evaluate("(() => { const ctx = window.__custom.getContext('2d'); ctx.fillStyle = 'rgb(20,180,50)'; ctx.fillRect(0,0,8,8); })()");
+            await pixel([20, 180, 50]);
+        });
+        await check("explicit null clears the backdrop", async () => {
+            await evaluate("window.__setBackdrop(null)");
+            await pixel([0, 0, 0]);
+        });
+        await check("removing the prop restores the default", async () => {
+            await evaluate("window.__setBackdrop(undefined)");
+            await pixel([22, 51, 80]);
+            await pixel([229, 140, 83], 300);
+        });
+    } finally { await evaluate("window.__unmount()"); }
+    return results;
+}
+
+async function buildFixture(adapter, grouped = false, canvas = false) {
     const require = createRequire(join(root, "demo", adapter, "package.json"));
     const { build } = await import(pathToFileURL(require.resolve("vite")).href);
-    const source = fixture(adapter, grouped);
+    const source = canvas ? canvasFixture(adapter) : fixture(adapter, grouped);
     const entry = join(root, "demo", adapter, `__interactive_entry.${source.extension}`);
     const component = join(root, "demo", adapter, "__interactive_fixture.svelte");
+    const probe = join(root, "demo", adapter, "__canvas_probe.svelte");
     const plugin = {
         name: "interactive-test-fixture", enforce: "pre",
         resolveId(id) {
             if (id === entry) return entry;
             if (id === "./__interactive_fixture.svelte") return component;
+            if (id === "./__canvas_probe.svelte") return probe;
         },
         load(id) {
             if (id === entry) return source.code;
             if (id === component) return source.component;
+            if (id === probe) return source.probe;
         }
     };
     const plugins = [plugin];
@@ -243,12 +376,12 @@ async function buildFixture(adapter, grouped = false) {
     const script = outputs.find(o => o.type === "chunk" && o.isEntry).code.replaceAll("</script", "<\\/script");
     const css = outputs.filter(o => o.type === "asset" && o.fileName.endsWith(".css")).map(o => o.source).join("\n");
     return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><style>
-        body { margin: 0; padding: 40px; } #box { display: flex; align-items: center; gap: 40px;
+        body { margin: 0; padding: 40px; } .fixture-canvas { width: 480px; height: 320px; } #box { display: flex; align-items: center; gap: 40px;
             width: 500px; height: 140px; padding: 20px; border: 1px solid; }
         button, a { padding: 16px; display: flex; gap: 8px; align-items: center; }
         #outside { margin-top: 80px; width: 800px; height: 160px; }
         ${css}</style></head><body><div id="app"></div><div id="outside">Outside</div>
-        <script>${harness}</script><script type="module">${script}</script></body></html>`;
+        <script>${canvas ? canvasHarness : harness}</script><script type="module">${script}</script></body></html>`;
 }
 
 async function runCases(evaluate, send, adapter, grouped = false, propsOnly = false) {
@@ -467,6 +600,15 @@ let total = 0;
 try {
     for (const adapter of ["react", "svelte", "vue", "solid"]) {
         if (process.argv.includes("--solid") && adapter !== "solid") continue;
+        const canvasFile = join(temporary, `${adapter}-canvas.html`);
+        await writeFile(canvasFile, await buildFixture(adapter, false, true));
+        const canvasResults = await withPage(canvasFile.slice(root.length), evaluate => runBackdropCases(evaluate, adapter));
+        total += canvasResults.length;
+        for (const result of canvasResults) {
+            if (!result.ok) failed++;
+            console.log(`${result.ok ? "ok" : "FAIL"} ${result.name}${result.error ? `\n  ${result.error}` : ""}`);
+        }
+        if (process.argv.includes("--canvas")) continue;
         for (const grouped of [false, true]) {
             const file = join(temporary, `${adapter}${grouped ? '-group' : ''}.html`);
             await writeFile(file, await buildFixture(adapter, grouped));
